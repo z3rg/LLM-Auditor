@@ -1,0 +1,31 @@
+# LLM Auditor — compose file ada di docker/, konteks build = root repo.
+# Jalankan DARI ROOT repo (agar --env-file menemukan ./.env):
+#   docker compose -f docker/docker-compose.yml --env-file .env up --build -d
+# atau lewat npm: `npm run docker:up`.
+#
+# Isi GROQ_API_KEY & GEMINI_API_KEY di .env (lihat .env.example) lebih dulu.
+# RAG embedding memakai Gemini API (butuh GEMINI_API_KEY saat runtime).
+name: llm-auditor
+services:
+  llm-auditor:
+    build:
+      context: ..              # root repo (relatif terhadap docker/)
+      dockerfile: docker/Dockerfile
+    image: llm-auditor:latest
+    container_name: llm-auditor
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Wajib untuk fitur AI Groq.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      # Wajib untuk RAG embedding (Gemini gemini-embedding-001).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-gemini-embedding-001}
+    volumes:
+      # Persist DB + basis pengetahuan RAG (PDF, embedding, riwayat kuis)
+      - auditor-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  auditor-data:

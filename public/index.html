@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Auditor — IT Audit Quiz Analytics</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- ============ LOGIN ============ -->
+  <div id="login">
+    <div class="login-card">
+      <div class="brand-row">
+        <div class="logo">A</div>
+        <div>
+          <h1>LLM Auditor</h1>
+          <div class="sub">IT Audit Quiz Analytics · Powered by Groq</div>
+        </div>
+      </div>
+      <p class="sub">Pilih peran untuk masuk (mode demo):</p>
+      <div class="role-list" id="roleList">
+        <div class="role-opt" data-role="super_admin">
+          <div class="ic">🛡️</div>
+          <div><div class="t">Super Admin</div><div class="d">Akses penuh · SQL Agent · kirim rekomendasi</div></div>
+        </div>
+        <div class="role-opt" data-role="auditor">
+          <div class="ic">🔎</div>
+          <div><div class="t">IT Auditor</div><div class="d">Analisis gap · rekomendasi AI</div></div>
+        </div>
+        <div class="role-opt" data-role="director">
+          <div class="ic">✅</div>
+          <div><div class="t">Direktur</div><div class="d">Tinjau &amp; acknowledge rekomendasi</div></div>
+        </div>
+        <div class="role-opt" data-role="participant">
+          <div class="ic">👤</div>
+          <div><div class="t">Peserta Audit</div><div class="d">Kerjakan kuis Anda untuk semua topik audit</div></div>
+        </div>
+      </div>
+      <label class="fld hidden" id="participantPickWrap" style="margin-bottom:14px">Pilih nama peserta
+        <select id="participantPick"><option value="">— memuat… —</option></select>
+      </label>
+      <button class="btn full" id="loginBtn" disabled>Masuk</button>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app" class="hidden">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="logo">A</div>
+        <h1>LLM Auditor</h1>
+      </div>
+      <a class="nav-item" data-tab="overview" data-roles="super_admin,auditor,director"><span class="ic">📊</span> Overview</a>
+      <a class="nav-item" data-tab="gaps" data-roles="super_admin,auditor,director"><span class="ic">🧠</span> Knowledge Gaps</a>
+      <a class="nav-item" data-tab="trend" data-roles="super_admin,auditor,director"><span class="ic">📈</span> Tren Skor</a>
+      <a class="nav-item" data-tab="newquiz" data-roles="participant"><span class="ic">📋</span> Kuis Anda</a>
+      <a class="nav-item" data-tab="sql" data-roles="super_admin"><span class="ic">💬</span> SQL Agent</a>
+      <a class="nav-item" data-tab="acks" data-roles="super_admin,auditor,director"><span class="ic">📝</span> Acknowledgement</a>
+      <a class="nav-item" data-tab="settings" data-roles="super_admin"><span class="ic">⚙️</span> Pengaturan</a>
+      <div class="nav-spacer"></div>
+      <div class="role-badge">
+        <span id="roleIcon">🛡️</span>
+        <div><div class="who" id="roleName">Super Admin</div><div class="sub" id="modelName">groq</div></div>
+      </div>
+      <button class="btn ghost sm" id="logoutBtn" style="margin-top:8px">Keluar</button>
+    </aside>
+
+    <main class="main">
+      <!-- Overview -->
+      <section class="tab" id="tab-overview">
+        <div class="page-head"><div>
+          <h2>Overview</h2>
+          <div class="desc">Ringkasan hasil kuis IT Auditor lintas divisi.</div>
+        </div></div>
+        <div class="cards" id="statCards"></div>
+        <div class="two-col">
+          <div class="panel"><h3>Skor Rata-rata per Divisi</h3><div id="divBars"></div></div>
+          <div class="panel"><h3>Skor Rata-rata per Topik</h3><div id="topicBars"></div></div>
+        </div>
+      </section>
+
+      <!-- Knowledge Gaps -->
+      <section class="tab hidden" id="tab-gaps">
+        <div class="page-head"><div>
+          <h2>Knowledge Gaps</h2>
+          <div class="desc">Identifikasi gap pengetahuan, lalu hasilkan rekomendasi AI &amp; topik kuis.</div>
+        </div></div>
+        <div class="panel">
+          <div class="toolbar">
+            <label class="fld">Tinjau berdasarkan
+              <select id="scopeType">
+                <option value="employee">Karyawan</option>
+                <option value="division">Divisi</option>
+              </select>
+            </label>
+            <label class="fld">Pilih
+              <select id="scopeRef" style="min-width:240px"></select>
+            </label>
+            <button class="btn sm" id="loadGaps">Tampilkan Gap</button>
+          </div>
+        </div>
+        <div id="gapResult"></div>
+      </section>
+
+      <!-- Tren Skor -->
+      <section class="tab hidden" id="tab-trend">
+        <div class="page-head"><div>
+          <h2>Tren Skor per Waktu</h2>
+          <div class="desc">Rata-rata skor kuis per bulan, dengan garis ambang gap sebagai acuan.</div>
+        </div></div>
+        <div class="panel">
+          <div class="toolbar">
+            <label class="fld">Bandingkan
+              <select id="trendMode">
+                <option value="overall">Keseluruhan</option>
+                <option value="division">Per Divisi</option>
+                <option value="topic">Per Topik</option>
+              </select>
+            </label>
+            <label class="fld" id="trendPickWrap" style="display:none">Pilih
+              <select id="trendPick" style="min-width:240px"></select>
+            </label>
+            <label class="fld">Rentang waktu
+              <select id="trendRange">
+                <option value="3">3 bulan terakhir</option>
+                <option value="6">6 bulan terakhir</option>
+                <option value="12">12 bulan terakhir</option>
+                <option value="all" selected>Semua</option>
+              </select>
+            </label>
+          </div>
+          <div id="trendChart" style="margin-top:14px"></div>
+          <div id="trendLegend" class="row" style="margin-top:6px"></div>
+        </div>
+      </section>
+
+      <!-- Kuis Anda (Peserta Audit) — kurikulum lengkap 10 topik berurutan -->
+      <section class="tab hidden" id="tab-newquiz">
+        <div class="page-head"><div>
+          <h2>Kuis Anda</h2>
+          <div class="desc">Setiap peserta melewati <strong>10 topik audit berurutan</strong>, masing-masing <strong>10 soal</strong> yang dibuat Groq. SQL Agent menyusun daftar &amp; status topik; berlaku untuk peserta baru maupun yang sudah pernah mengerjakan.</div>
+        </div></div>
+        <div class="panel">
+          <div class="flow">
+            <span class="step">SQL Agent (daftar 10 topik)</span><span class="arrow">→</span>
+            <span class="step">Groq (10 soal/topik)</span><span class="arrow">→</span>
+            <span class="step">Kerjakan &amp; nilai</span><span class="arrow">→</span>
+            <span class="step">Skor tercatat</span>
+          </div>
+        </div>
+        <div id="newQuizGapBox"></div>
+        <div id="newQuizPlayBox"></div>
+      </section>
+
+      <!-- SQL Agent -->
+      <section class="tab hidden" id="tab-sql">
+        <div class="page-head"><div>
+          <h2>SQL Agent</h2>
+          <div class="desc">Tanya dalam bahasa natural — AI menyusun query SQL read-only &amp; mengeksekusinya.</div>
+        </div></div>
+        <div class="panel">
+          <div class="flow" style="margin-bottom:12px">
+            <span class="step">Super Admin</span><span class="arrow">→</span>
+            <span class="step">SQL Agent (Groq)</span><span class="arrow">→</span>
+            <span class="step">Direktur Acknowledge</span>
+          </div>
+          <label class="fld">Pertanyaan
+            <input type="text" id="sqlQuestion" placeholder="contoh: divisi mana dengan skor rata-rata terendah?" />
+          </label>
+          <div class="row" style="margin-top:10px">
+            <button class="btn sm" id="askSql">Jalankan</button>
+            <span class="muted">Hanya SELECT yang diizinkan (read-only).</span>
+          </div>
+          <div class="row" style="margin-top:10px" id="sqlExamples"></div>
+        </div>
+        <div id="sqlResult"></div>
+      </section>
+
+      <!-- Pengaturan: PDF Importer (RAG) + toggle ReAct -->
+      <section class="tab hidden" id="tab-settings">
+        <div class="page-head"><div>
+          <h2>Pengaturan</h2>
+          <div class="desc">Impor PDF sebagai <strong>pengetahuan tambahan (RAG)</strong> untuk soal kuis, dan atur framework <strong>ReAct</strong>.</div>
+        </div></div>
+
+        <div class="panel">
+          <h3>📚 PDF Importer — Basis Pengetahuan RAG</h3>
+          <div class="muted" style="margin-bottom:10px">
+            Teks PDF diekstrak, dipotong, di-<em>embed</em> dengan <strong>Gemini</strong>
+            (<code>gemini-embedding-001</code>), lalu disimpan ke <strong>SQLite + sqlite-vec</strong>.
+            Saat membuat kuis, agen ReAct menarik potongan paling relevan dari sini agar soal
+            berbasis materi Anda.
+          </div>
+          <div id="ragStatus" class="kv" style="margin-bottom:12px"></div>
+          <div class="dropzone" id="pdfDrop">
+            <input type="file" id="pdfInput" accept="application/pdf,.pdf" multiple hidden />
+            <div class="dz-inner">
+              <div style="font-size:30px">⬆️</div>
+              <div><strong>Seret PDF ke sini</strong> atau klik untuk memilih berkas</div>
+              <div class="muted" style="font-size:12px">PDF berbasis teks · maks 30MB/berkas</div>
+            </div>
+          </div>
+          <div id="pdfImportMsg"></div>
+          <div id="pdfDocs" style="margin-top:14px"></div>
+        </div>
+
+        <div class="panel">
+          <h3>🔎 Uji Pencarian (Retrieval)</h3>
+          <div class="muted" style="margin-bottom:8px">Cek potongan materi yang akan diambil agen ReAct untuk sebuah kata kunci.</div>
+          <div class="row">
+            <input type="text" id="ragQuery" placeholder="contoh: tahapan incident response" style="flex:1;min-width:240px" />
+            <button class="btn sm" id="ragSearchBtn">Cari</button>
+          </div>
+          <div id="ragSearchResult"></div>
+        </div>
+
+        <div class="panel">
+          <h3>⚡ Konfigurasi Embedding (Gemini)</h3>
+          <div class="muted" style="margin-bottom:10px">
+            RAG memakai <strong>Gemini <code>gemini-embedding-001</code></strong> (3072-dim). Mengubah model/kunci akan <strong>me-reindex</strong> semua chunk yang tersimpan secara otomatis.
+          </div>
+          <div id="embedStatus" class="kv" style="margin-bottom:12px"></div>
+          <div class="two-col" style="gap:10px;align-items:start">
+            <label class="fld">Gemini API Key
+              <input type="password" id="geminiKeyInput" placeholder="AIza… (kosong = pakai env var)" autocomplete="new-password" />
+            </label>
+            <label class="fld">Model
+              <input type="text" id="geminiModelInput" placeholder="gemini-embedding-001" />
+            </label>
+          </div>
+          <label class="row" style="gap:10px;cursor:pointer;margin-top:10px">
+            <input type="checkbox" id="tglLegalMode" checked />
+            <span>Gunakan <strong>parser hierarki hukum</strong> saat impor PDF (BAB / Pasal / Seksi / Poin) — <em>default</em></span>
+          </label>
+          <div class="row" style="margin-top:12px;gap:10px">
+            <button class="btn sm" id="applyEmbedBtn">Terapkan</button>
+            <span class="muted" style="font-size:12px">Reindex berjalan di background — halaman ini akan memperbarui status.</span>
+          </div>
+          <div id="embedMsg"></div>
+        </div>
+
+        <div class="panel">
+          <h3>🧠 Framework Kuis (ReAct + RAG)</h3>
+          <label class="row" style="gap:10px;cursor:pointer;margin-bottom:8px">
+            <input type="checkbox" id="tglReact" /> <span>Gunakan <strong>ReAct</strong> (Reason + Act) saat membuat kuis</span>
+          </label>
+          <label class="row" style="gap:10px;cursor:pointer">
+            <input type="checkbox" id="tglRag" /> <span>Gunakan <strong>RAG</strong> dari PDF sebagai pengetahuan tambahan soal</span>
+          </label>
+          <div id="settingsMsg"></div>
+        </div>
+      </section>
+
+      <!-- Acknowledgement -->
+      <section class="tab hidden" id="tab-acks">
+        <div class="page-head"><div>
+          <h2>Acknowledgement</h2>
+          <div class="desc">Rekomendasi yang dikirim Super Admin/Auditor untuk ditinjau Direktur.</div>
+        </div></div>
+        <div class="panel">
+          <div class="flow">
+            <span class="step">Super Admin / Auditor</span><span class="arrow">→</span>
+            <span class="step">Rekomendasi AI</span><span class="arrow">→</span>
+            <span class="step">Direktur Acknowledge</span>
+          </div>
+        </div>
+        <div id="ackList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
