@@ -27,14 +27,15 @@ const db = require('./lib/db');
 const ai = require('./lib/groq');
 const vec = require('./lib/vec');
 const pdf = require('./lib/pdf');
+const auth = require('./lib/auth');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // --- helpers ---------------------------------------------------------------
-function sendJson(res, code, obj) {
+function sendJson(res, code, obj, headers = {}) {
   const body = JSON.stringify(obj);
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(body);
 }
 function readBody(req) {
@@ -82,10 +83,144 @@ function serveStatic(res, urlPath) {
   });
 }
 
+/** Public shape of an account — never leaks password_hash. */
+function publicUser(u) {
+  return {
+    id: u.id, name: u.name, email: u.email, role: u.role,
+    division: u.division, divisionId: u.divisionId, status: u.status,
+  };
+}
+const isSuper = (u) => u.role === 'super_admin';
+const isStaff = (u) => auth.STAFF_ROLES.includes(u.role);
+
+// --- public (pre-login) routes ---------------------------------------------
+/** Handles the endpoints reachable without a session. Returns true when it
+ *  answered the request, false when the caller should keep routing. */
+async function publicApi(req, res, p) {
+  // Divisions are needed by the registration form, before any session exists.
+  if (req.method === 'GET' && p === '/api/auth/divisions') {
+    sendJson(res, 200, db.listDivisions());
+    return true;
+  }
+
+  if (req.method === 'POST' && p === '/api/auth/register') {
+    const body = await readBody(req);
+    const name = String(body.name || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    const divisionId = Number(body.division_id) || null;
+    const errors = auth.validateRegistration({ name, email, password, divisionId });
+    if (errors.length) { sendJson(res, 400, { error: errors[0], errors }); return true; }
+    if (db.findUserByEmail(email)) {
+      sendJson(res, 409, { error: 'Email ini sudah terdaftar. Masuk dengan kata sandi Anda.' });
+      return true;
+    }
+    const user = db.createUser({
+      name, email, divisionId, role: 'employee',
+      passwordHash: auth.hashPassword(password),
+    });
+    const { token, expires } = auth.startSession(user.id, req.headers['user-agent']);
+    sendJson(res, 201, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires) });
+    return true;
+  }
+
+  if (req.method === 'POST' && p === '/api/auth/login') {
+    const body = await readBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    if (!email || !password) { sendJson(res, 400, { error: 'Isi email dan kata sandi.' }); return true; }
+    if (auth.throttled(email)) {
+      sendJson(res, 429, { error: 'Terlalu banyak percobaan gagal. Coba lagi dalam 10 menit.' });
+      return true;
+    }
+    const user = db.findUserByEmail(email);
+    if (!user || !user.password_hash || !auth.verifyPassword(password, user.password_hash)) {
+      auth.noteFailure(email);
+      sendJson(res, 401, { error: 'Email atau kata sandi salah.' });
+      return true;
+    }
+    if (user.status !== 'active') {
+      sendJson(res, 403, { error: 'Akun ini dinonaktifkan. Hubungi Super Admin.' });
+      return true;
+    }
+    auth.clearFailures(email);
+    const { token, expires } = auth.startSession(user.id, req.headers['user-agent']);
+    sendJson(res, 200, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires) });
+    return true;
+  }
+
+  return false; // not a public route
+}
+
 // --- API routes ------------------------------------------------------------
 async function api(req, res, url) {
   const p = url.pathname;
   const q = url.searchParams;
+
+  // Pre-login endpoints ------------------------------------------------------
+  if (p.startsWith('/api/auth/') && await publicApi(req, res, p)) return;
+
+  // Everything below requires a valid session -------------------------------
+  const user = auth.currentUser(req);
+  if (!user) {
+    if (req.method === 'GET' && p === '/api/auth/me') return sendJson(res, 401, { error: 'Belum masuk.' });
+    return sendJson(res, 401, { error: 'Sesi berakhir. Masuk kembali untuk melanjutkan.' });
+  }
+
+  if (req.method === 'GET' && p === '/api/auth/me') return sendJson(res, 200, { user: publicUser(user) });
+  if (req.method === 'POST' && p === '/api/auth/logout') {
+    auth.endSession(auth.readCookie(req, 'sid'));
+    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
+  }
+  if (req.method === 'POST' && p === '/api/auth/password') {
+    const body = await readBody(req);
+    const current = String(body.current_password || '');
+    const next = String(body.new_password || '');
+    const full = db.findUserByEmail(user.email);
+    if (!full || !auth.verifyPassword(current, full.password_hash)) {
+      return sendJson(res, 401, { error: 'Kata sandi saat ini salah.' });
+    }
+    if (next.length < 8 || !/\d/.test(next)) {
+      return sendJson(res, 400, { error: 'Kata sandi baru minimal 8 karakter dan memuat satu angka.' });
+    }
+    db.setPassword(user.id, auth.hashPassword(next));
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Account administration (Super Admin) ------------------------------------
+  if (req.method === 'GET' && p === '/api/admin/users') {
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin.' });
+    return sendJson(res, 200, { users: db.listAccounts(), roles: auth.ROLES });
+  }
+  if (req.method === 'POST' && /^\/api\/admin\/users\/\d+\/role$/.test(p)) {
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin.' });
+    const id = Number(p.split('/')[4]);
+    const body = await readBody(req);
+    if (!auth.ROLES.includes(body.role)) return sendJson(res, 400, { error: 'Peran tidak dikenal.' });
+    if (id === user.id && body.role !== 'super_admin') {
+      return sendJson(res, 400, { error: 'Anda tidak dapat menurunkan peran akun Anda sendiri.' });
+    }
+    const updated = db.setUserRole(id, body.role);
+    if (!updated) return sendJson(res, 404, { error: 'Akun tidak ditemukan.' });
+    return sendJson(res, 200, { user: publicUser(updated) });
+  }
+  if (req.method === 'POST' && /^\/api\/admin\/users\/\d+\/status$/.test(p)) {
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin.' });
+    const id = Number(p.split('/')[4]);
+    const body = await readBody(req);
+    const status = body.status === 'active' ? 'active' : 'disabled';
+    if (id === user.id) return sendJson(res, 400, { error: 'Anda tidak dapat menonaktifkan akun Anda sendiri.' });
+    const updated = db.setUserStatus(id, status);
+    if (!updated) return sendJson(res, 404, { error: 'Akun tidak ditemukan.' });
+    return sendJson(res, 200, { user: publicUser(updated) });
+  }
+
+  // Analytics are for staff; participants only reach their own quiz data.
+  const STAFF_ONLY = ['/api/employees', '/api/overview', '/api/trend', '/api/gaps/employee',
+    '/api/gaps/division', '/api/ai/recommendation', '/api/ai/quiz-topics', '/api/sql-agent'];
+  if ((STAFF_ONLY.includes(p) || p === '/api/recommendations' || /^\/api\/recommendations\/\d+/.test(p)) && !isStaff(user)) {
+    return sendJson(res, 403, { error: 'Peran Anda tidak memiliki akses ke data ini.' });
+  }
 
   // Reference data ----------------------------------------------------------
   if (req.method === 'GET' && p === '/api/divisions') return sendJson(res, 200, db.listDivisions());
@@ -114,6 +249,7 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && p === '/api/config') {
     return sendJson(res, 200, {
+      user: publicUser(user),
       model: ai.cfg().model,
       hasKey: !!ai.cfg().key,
       gapThreshold: db.GAP_THRESHOLD,
@@ -133,7 +269,7 @@ async function api(req, res, url) {
     });
   }
   if (req.method === 'POST' && p === '/api/settings') {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat mengubah pengaturan.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat mengubah pengaturan.' });
     const body = await readBody(req);
     if ('quizUseReact' in body) db.setSetting('quiz_use_react', body.quizUseReact ? '1' : '0');
     if ('quizUseRag' in body) db.setSetting('quiz_use_rag', body.quizUseRag ? '1' : '0');
@@ -147,7 +283,7 @@ async function api(req, res, url) {
 
   // Embedding backend configuration -----------------------------------------
   if (req.method === 'GET' && p === '/api/settings/embed') {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin.' });
     const active = require('./lib/embedder').active();
     return sendJson(res, 200, {
       backend: 'gemini',
@@ -159,7 +295,7 @@ async function api(req, res, url) {
     });
   }
   if (req.method === 'POST' && p === '/api/settings/embed') {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin.' });
     const body = await readBody(req);
     try {
       const embedder = require('./lib/embedder');
@@ -182,7 +318,7 @@ async function api(req, res, url) {
     return sendJson(res, 200, { documents: vec.listDocuments(), rag: vec.stats() });
   }
   if (req.method === 'POST' && p === '/api/pdf/import') {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat mengunggah PDF.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat mengunggah PDF.' });
     let buf;
     try { buf = await readRawBody(req); } catch (e) { return sendJson(res, 413, { error: e.message }); }
     const filename = decodeURIComponent(req.headers['x-filename'] || 'document.pdf').replace(/[\r\n]/g, '');
@@ -201,14 +337,14 @@ async function api(req, res, url) {
     } catch (e) { return sendJson(res, 500, { error: e.message }); }
   }
   if (req.method === 'DELETE' && /^\/api\/pdf\/documents\/\d+$/.test(p)) {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menghapus dokumen.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menghapus dokumen.' });
     const id = Number(p.split('/').pop());
     const ok = vec.deleteDocument(id);
     if (!ok) return sendJson(res, 404, { error: 'Dokumen tidak ditemukan.' });
     return sendJson(res, 200, { deleted: id, rag: vec.stats() });
   }
   if (req.method === 'POST' && p === '/api/pdf/search') {
-    if (req.headers['x-role'] !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menguji pencarian.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menguji pencarian.' });
     const body = await readBody(req);
     const query = (body.query || '').trim();
     if (!query) return sendJson(res, 400, { error: 'Query kosong.' });
@@ -253,8 +389,7 @@ async function api(req, res, url) {
 
   // Feature 3a: SQL Agent (super admin) -------------------------------------
   if (req.method === 'POST' && p === '/api/sql-agent') {
-    const role = req.headers['x-role'];
-    if (role !== 'super_admin') return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menggunakan SQL Agent.' });
+    if (!isSuper(user)) return sendJson(res, 403, { error: 'Hanya Super Admin yang dapat menggunakan SQL Agent.' });
     const body = await readBody(req);
     const question = (body.question || '').trim();
     if (!question) return sendJson(res, 400, { error: 'Pertanyaan kosong.' });
@@ -288,8 +423,7 @@ async function api(req, res, url) {
     return sendJson(res, 200, db.listRecommendations(status));
   }
   if (req.method === 'POST' && p === '/api/recommendations') {
-    const role = req.headers['x-role'];
-    if (role !== 'super_admin' && role !== 'auditor') {
+    if (user.role !== 'super_admin' && user.role !== 'auditor') {
       return sendJson(res, 403, { error: 'Hanya Super Admin / Auditor yang dapat mengirim rekomendasi.' });
     }
     const body = await readBody(req);
@@ -305,23 +439,24 @@ async function api(req, res, url) {
       recommendation: body.recommendation,
       recommended_topics: body.recommended_topics,
       model: body.model,
-      created_by: body.created_by || (role === 'auditor' ? 'Lead IT Auditor' : 'Super Admin'),
+      created_by: user.name,
     });
     return sendJson(res, 201, rec);
   }
   if (req.method === 'POST' && /^\/api\/recommendations\/\d+\/acknowledge$/.test(p)) {
-    const role = req.headers['x-role'];
-    if (role !== 'director') return sendJson(res, 403, { error: 'Hanya Direktur yang dapat acknowledge.' });
+    if (user.role !== 'director') return sendJson(res, 403, { error: 'Hanya Direktur yang dapat acknowledge.' });
     const id = Number(p.split('/')[3]);
     const body = await readBody(req);
-    const rec = db.acknowledgeRecommendation(id, body.ack_by || 'Direktur Utama', body.ack_note);
+    const rec = db.acknowledgeRecommendation(id, user.name, body.ack_note);
     if (!rec) return sendJson(res, 404, { error: 'Rekomendasi tidak ditemukan.' });
     return sendJson(res, 200, rec);
   }
 
   // Participant: full quiz curriculum (all topics, fixed order) — SQL driven --
   if (req.method === 'GET' && p === '/api/participant/curriculum') {
-    const data = db.participantCurriculum(Number(q.get('id')));
+    // A participant always sees their own curriculum; staff may inspect others.
+    const target = isStaff(user) && q.get('id') ? Number(q.get('id')) : user.id;
+    const data = db.participantCurriculum(target);
     if (!data) return sendJson(res, 404, { error: 'Peserta tidak ditemukan.' });
     return sendJson(res, 200, data);
   }
@@ -329,7 +464,8 @@ async function api(req, res, url) {
   // Participant: generate an improvement quiz (Groq) -------------------------
   if (req.method === 'POST' && p === '/api/quiz/generate') {
     const body = await readBody(req);
-    const employeeId = Number(body.employee_id);
+    // Quizzes are always taken as yourself — the client cannot pick an identity.
+    const employeeId = user.id;
     const topicId = Number(body.topic_id);
     const emp = db.employeeById(employeeId);
     const topic = db.topicById(topicId);
@@ -387,6 +523,7 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const session = db.getQuizSession(Number(body.session_id));
     if (!session) return sendJson(res, 404, { error: 'Sesi kuis tidak ditemukan.' });
+    if (session.employee_id !== user.id) return sendJson(res, 403, { error: 'Sesi kuis ini milik peserta lain.' });
     if (session.status !== 'open') return sendJson(res, 409, { error: 'Sesi kuis sudah dikumpulkan.' });
     const answers = Array.isArray(body.answers) ? body.answers : [];
     const payload = JSON.parse(session.payload);
@@ -457,12 +594,20 @@ const server = http.createServer((req, res) => {
 (async () => {
   // Hangatkan embedder RAG (muat model lokal & rekonsiliasi index) sebelum melayani.
   try { await vec.ready(); } catch (e) { console.warn('  RAG init warning:', e.message); }
+  // Beri kata sandi awal untuk akun staf bawaan (sekali saja, saat pertama jalan).
+  const boot = auth.bootstrap();
   server.listen(PORT, () => {
     const r = vec.stats();
     console.log(`\n  LLM Auditor running:  http://localhost:${PORT}`);
     console.log(`  Groq model:           ${ai.cfg().model}`);
     console.log(`  Groq key loaded:      ${ai.cfg().key ? 'yes' : 'NO — set GROQ_API_KEY in .env'}`);
     console.log(`  RAG embedder:         ${r.embedder} (dim ${r.dim})`);
-    console.log(`  RAG vector store:     ${r.backend}\n`);
+    console.log(`  RAG vector store:     ${r.backend}`);
+    if (boot.seeded.length) {
+      console.log(`\n  Akun staf disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
+      for (const email of boot.seeded) console.log(`    · ${email}`);
+      console.log('  Ganti kata sandi setelah masuk (menu Pengaturan), atau set SEED_PASSWORD di .env.');
+    }
+    console.log('');
   });
 })();

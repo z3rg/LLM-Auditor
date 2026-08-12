@@ -27,7 +27,8 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 ```
 server.js              HTTP server + routing API + static files + warmup RAG
 lib/
-  db.js                Skema SQLite, seed deterministik, view analitik gap, app_settings
+  auth.js              Autentikasi: hash scrypt, sesi + cookie HttpOnly, throttle login, bootstrap akun staf
+  db.js                Skema SQLite, seed deterministik, view analitik gap, app_settings, akun & sessions
   groq.js              Wrapper Groq + fitur AI + generator kuis ReAct
   vec.js               RAG store: chunking (parser hukum + generik), index sqlite-vec (KNN), reindex, fallback cosine
   embedder.js          Embedder Gemini-only (gemini-embedding-001, 3072-dim) via fetch
@@ -36,9 +37,10 @@ lib/
 scripts/
   ingest_legal_pdf.py  Ingest CLI massal PDF hukum (pypdf + Gemini) -> tabel RAG yang sama (npm run ingest-legal)
 public/
-  index.html           Markup (login + semua tab, termasuk Pengaturan)
-  app.js               Semua logika frontend
-  styles.css           Tema
+  index.html           Markup (layar Masuk/Daftar + semua tab, termasuk Pengaturan & Akun)
+  app.js               Semua logika frontend (termasuk alur auth & pengelolaan akun)
+  styles.css           Tema dashboard
+  auth.css             Tema layar Masuk/Daftar (kertas kerja + register kontrol + stempel)
 docker/
   Dockerfile           Image portabel (sqlite-vec; app zero-dependency); RAG via Gemini saat runtime
   docker-compose.yml   Orkestrasi 1-perintah + volume persist (context build = root, ../)
@@ -80,8 +82,17 @@ Browser ──/api/*──> server.js ──> lib/db.js (SQLite + view)
                                             └──> sqlite-vec (KNN)
 ```
 
-- **Kontrol akses**: header `x-role` (`super_admin|auditor|director|participant`). Tidak ada
-  auth nyata (mode demo). Endpoint sensitif memeriksa role dan mengembalikan `403`.
+- **Autentikasi**: cookie sesi `sid` (HttpOnly, SameSite=Lax, 7 hari). Token acak 32 byte,
+  disimpan **ter-hash SHA-256** di tabel `sessions`; kata sandi di-hash **scrypt** dengan salt
+  per akun. `auth.currentUser(req)` me-resolve akun dari cookie di awal `api()` — seluruh
+  endpoint di luar `/api/auth/*` menolak request tanpa sesi dengan `401`.
+- **Kontrol akses**: peran dibaca dari akun pada sesi (`employee|auditor|director|super_admin`),
+  bukan dari header/body klien. Endpoint analitik dibatasi peran staf, endpoint Super Admin
+  memakai `isSuper(user)`, dan endpoint peserta selalu memakai `user.id` (klien tidak bisa
+  menyamar sebagai peserta lain — `/api/quiz/submit` juga memverifikasi kepemilikan sesi kuis).
+- **Pendaftaran**: `POST /api/auth/register` selalu membuat akun `role='employee'`. Kenaikan
+  peran & penonaktifan lewat `/api/admin/users/:id/{role,status}` (Super Admin); menonaktifkan
+  akun langsung menghapus seluruh sesinya.
 - **Quiz pipeline (Fitur 7/9)**: `/api/quiz/generate` → `ai.generateQuizReAct()` (ReAct) →
   tool `search_knowledge` memanggil `vec.search()` → `ai.groundedGenerate()` menyusun soal →
   disimpan ke `quiz_sessions` (jawaban benar di-strip sebelum dikirim ke klien) →
@@ -92,7 +103,9 @@ Browser ──/api/*──> server.js ──> lib/db.js (SQLite + view)
 ## 5. Model Data (SQLite)
 
 Tabel inti: `divisions`, `topics`, `employees`, `quiz_attempts`, `recommendations`,
-`quiz_sessions`, `app_settings`. RAG: `pdf_documents`, `pdf_chunks`, dan virtual table
+`quiz_sessions`, `app_settings`, `sessions`. Akun hidup di `employees` (kolom tambahan
+`password_hash`, `status`, `created_at` + unique index email `COLLATE NOCASE`) sehingga peserta
+yang mendaftar langsung ikut ke seluruh view analitik gap tanpa join tambahan. RAG: `pdf_documents`, `pdf_chunks`, dan virtual table
 `vec_pdf_chunks USING vec0(embedding float[DIM])`.
 
 **View analitik** membakukan logika gap (rata-rata `< GAP_THRESHOLD`) — selalu pakai view
@@ -192,7 +205,9 @@ dipertahankan agar JSON soal tidak terpotong di tengah loop.
 ### Menambah endpoint API
 Tambahkan cabang di fungsi `api()` di `server.js` (cek `req.method` + `url.pathname`,
 gunakan `sendJson`). Untuk body JSON pakai `readBody(req)`; untuk biner pakai `readRawBody(req)`.
-Tambah kontrol `x-role` bila perlu. Dokumentasikan di tabel API README.
+Endpoint otomatis butuh sesi (objek `user` tersedia di dalam `api()`); tambahkan cek peran
+dengan `isSuper(user)` / `isStaff(user)` bila perlu, atau daftarkan path di `STAFF_ONLY`.
+Dokumentasikan di tabel API README.
 
 ### Mengganti model embedding Gemini
 Embedding RAG terikat ke satu backend (Gemini). Ganti model lewat `GEMINI_EMBED_MODEL` (env) atau
@@ -269,7 +284,10 @@ Tidak ada test runner. Pola verifikasi yang dipakai selama pengembangan:
 - **Modul terisolasi**: `node -e "require('./lib/vec') …"` untuk roundtrip add/search/delete.
 - **PDF**: hasilkan PDF Flate via `zlib.deflateSync` lalu cek `pdf.extractText`.
 - **API**: `curl` endpoint (lihat contoh di README & §3 di atas).
-- **E2E UI**: jalankan server, gunakan preview browser (login per peran).
+- **E2E UI**: jalankan server, buka browser, daftar akun peserta baru dan masuk sebagai
+  akun staf untuk memeriksa gating menu per peran.
+- **Auth**: `curl -c sid.txt -X POST /api/auth/login …` lalu `curl -b sid.txt …`; verifikasi
+  `401` tanpa cookie, `403` untuk peran yang salah, dan bahwa `?id=` peserta lain diabaikan.
 
 Saran ke depan: tambahkan smoke test ringan (mis. `node --test`) untuk `pdf.js`, parser hierarki
 hukum `vec.js` (`parseHierarchyChunks`, deterministik tanpa jaringan), dan rekonsiliasi dimensi
@@ -280,7 +298,8 @@ hukum `vec.js` (`parseHierarchyChunks`, deterministik tanpa jaringan), dan rekon
 ## 12. Ide Pengembangan Lanjutan
 
 - **OCR** untuk PDF hasil scan (mis. integrasi Tesseract opsional) agar importer lebih luas.
-- **Auth nyata** (saat ini login demo tanpa password).
+- **Penguatan auth**: cookie `Secure` di belakang HTTPS, reset kata sandi lewat email,
+  verifikasi domain email perusahaan, 2FA, dan audit log percobaan login.
 - **Multi-arch vendor sqlite-vec** ter-bundle untuk dev native lintas-OS (kini hanya macOS arm64).
 - **Hybrid retrieval** (gabung skor leksikal + semantik) dan **reranking**.
 - **Chunking lebih cerdas** (sadar heading/section) & dedup lintas-dokumen.
