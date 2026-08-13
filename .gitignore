@@ -23,9 +23,9 @@ data/*
 *.log
 npm-debug.log*
 
-# Media & dokumen presentasi — disimpan lokal saja, tidak ikut ke repo.
-# Dek dokumentasi (.pptx/.pdf) dipelihara di luar git; dokumentasi.md yang
-# menjadi rujukan tertulis di repo.
+# Media & dek presentasi — disimpan lokal saja, tidak ikut ke repo.
+# Yang diabaikan hanya dek dokumentasi itu sendiri; PDF lain (mis. laporan,
+# lampiran, regulasi) tetap boleh dilacak seperti biasa.
 *.mp4
 *.pptx
-*.pdf
+/dokumentasi.pdf
