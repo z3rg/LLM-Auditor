@@ -23,6 +23,9 @@ data/*
 *.log
 npm-debug.log*
 
-# Media berat (rekaman demo tidak ikut ke repo).
-# dokumentasi.pptx dilacak sebagai satu-satunya sumber dek dokumentasi.
+# Media & dokumen presentasi — disimpan lokal saja, tidak ikut ke repo.
+# Dek dokumentasi (.pptx/.pdf) dipelihara di luar git; dokumentasi.md yang
+# menjadi rujukan tertulis di repo.
 *.mp4
+*.pptx
+*.pdf
