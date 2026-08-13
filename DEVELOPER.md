@@ -279,21 +279,41 @@ root via flag `--env-file .env`.
 
 ---
 
-## 11. Verifikasi (manual)
+## 11. Verifikasi
 
-Tidak ada test runner. Pola verifikasi yang dipakai selama pengembangan:
+### Uji otomatis — `npm run test:auth`
+
+`scripts/test_auth.js` menjalankan **42 pemeriksaan** terhadap server sungguhan (port 3116-3118):
+atribut cookie di empat skenario protokol, gerbang sesi, kontrol peran, pendaftaran, administrasi
+akun, ganti kata sandi, throttle login, aset statis, dan kebersihan layar masuk dari struktur peran.
+
+Dua sifat yang membuatnya aman dijalankan kapan saja:
+
+- Berjalan di atas **salinan** database lewat `DB_PATH` (`os.tmpdir()`), sehingga snapshot
+  `data/auditor.db` yang dilacak git tidak pernah berubah.
+- **Tidak memanggil Groq/Gemini**, jadi tidak butuh API key dan tidak menghabiskan kuota.
+  Sesi kuis untuk uji kepemilikan disisipkan langsung ke tabel `quiz_sessions`.
+
+Menambah kasus uji: tulis `check('nama', kondisi)` di dalam blok yang relevan — helper `req()`
+mengembalikan `{status, data, setCookie}` dan proses keluar dengan kode 1 bila ada yang gagal.
+
+> Batas yang perlu diingat: uji berbasis `fetch` **tidak** menegakkan atribut cookie. Regresi
+> `Secure` hanya terlihat di browser sungguhan, jadi sekali-sekali login manual di
+> `http://localhost` tetap perlu.
+
+### Verifikasi manual (bagian yang belum terotomasi)
 
 - **Modul terisolasi**: `node -e "require('./lib/vec') …"` untuk roundtrip add/search/delete.
 - **PDF**: hasilkan PDF Flate via `zlib.deflateSync` lalu cek `pdf.extractText`.
 - **API**: `curl` endpoint (lihat contoh di README & §3 di atas).
 - **E2E UI**: jalankan server, buka browser, daftar akun peserta baru dan masuk sebagai
   akun staf untuk memeriksa gating menu per peran.
-- **Auth**: `curl -c sid.txt -X POST /api/auth/login …` lalu `curl -b sid.txt …`; verifikasi
-  `401` tanpa cookie, `403` untuk peran yang salah, dan bahwa `?id=` peserta lain diabaikan.
+- **Auth**: sudah tercakup `npm run test:auth`; untuk pemeriksaan cepat manual pakai
+  `curl -c sid.txt -X POST /api/auth/login …` lalu `curl -b sid.txt …`.
 
-Saran ke depan: tambahkan smoke test ringan (mis. `node --test`) untuk `pdf.js`, parser hierarki
-hukum `vec.js` (`parseHierarchyChunks`, deterministik tanpa jaringan), dan rekonsiliasi dimensi
-`vec.js`. Tes embedder Gemini perlu key/jaringan, jadi cocok di-mock atau ditandai opsional.
+Saran ke depan: perluas pola `scripts/test_auth.js` ke `pdf.js`, parser hierarki hukum `vec.js`
+(`parseHierarchyChunks`, deterministik tanpa jaringan), dan rekonsiliasi dimensi `vec.js`.
+Tes embedder Gemini perlu key/jaringan, jadi cocok di-mock atau ditandai opsional.
 
 ---
 

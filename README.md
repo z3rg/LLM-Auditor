@@ -149,6 +149,12 @@ Buka **<http://localhost:3000>** di browser. Layar pertama adalah **Masuk / Daft
   Kata sandi awal juga dicetak di konsol server saat pertama kali disiapkan. **Ganti kata sandi**
   setelah masuk lewat tab **Akun**. Peran akun lain dinaikkan Super Admin di **Akun → Akun Terdaftar & Peran**.
 
+**Uji regresi autentikasi** (42 pemeriksaan; memakai salinan database, tanpa API key):
+
+```bash
+npm run test:auth
+```
+
 **Reset / isi ulang data dummy** (menghapus rekomendasi & meng-generate ulang data kuis):
 
 ```bash
@@ -403,6 +409,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | `lib/pdf.js` | Ekstraktor teks PDF zero-dependency (FlateDecode via `node:zlib`) |
 | `lib/vendor/vec0.dylib` | Ekstensi `sqlite-vec` (macOS arm64) untuk dev native; di Docker diganti `vec0.so` Linux |
 | `scripts/ingest_legal_pdf.py` | Ingest CLI massal PDF hukum (pypdf + Gemini) → menulis ke tabel RAG yang sama; `npm run ingest-legal` |
+| `scripts/test_auth.js` | Uji regresi autentikasi (42 pemeriksaan) di atas salinan DB; `npm run test:auth` |
 | `docker/` | Berkas Docker: `Dockerfile`, `docker-compose.yml`, `Dockerfile.dockerignore`. Image portabel (sqlite-vec; app zero-dependency); embedding RAG via Gemini API saat runtime. Konteks build = root |
 | `data/` | DB runtime SQLite (`data/auditor.db` + WAL) — auto-dibuat, di-gitignore; mirror volume Docker `/app/data` |
 | `lib/auth.js` | Autentikasi: hash scrypt, validasi pendaftaran, sesi + cookie, throttle login, bootstrap akun staf |
