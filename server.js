@@ -120,7 +120,7 @@ async function publicApi(req, res, p) {
       passwordHash: auth.hashPassword(password),
     });
     const { token, expires } = auth.startSession(user.id, req.headers['user-agent']);
-    sendJson(res, 201, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires) });
+    sendJson(res, 201, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires, auth.isSecureRequest(req)) });
     return true;
   }
 
@@ -145,7 +145,7 @@ async function publicApi(req, res, p) {
     }
     auth.clearFailures(email);
     const { token, expires } = auth.startSession(user.id, req.headers['user-agent']);
-    sendJson(res, 200, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires) });
+    sendJson(res, 200, { user: publicUser(user) }, { 'Set-Cookie': auth.sessionCookie(token, expires, auth.isSecureRequest(req)) });
     return true;
   }
 
@@ -170,7 +170,7 @@ async function api(req, res, url) {
   if (req.method === 'GET' && p === '/api/auth/me') return sendJson(res, 200, { user: publicUser(user) });
   if (req.method === 'POST' && p === '/api/auth/logout') {
     auth.endSession(auth.readCookie(req, 'sid'));
-    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
+    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie(auth.isSecureRequest(req)) });
   }
   if (req.method === 'POST' && p === '/api/auth/password') {
     const body = await readBody(req);

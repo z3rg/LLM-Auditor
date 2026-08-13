@@ -149,6 +149,12 @@ Buka **<http://localhost:3000>** di browser. Layar pertama adalah **Masuk / Daft
   Kata sandi awal juga dicetak di konsol server saat pertama kali disiapkan. **Ganti kata sandi**
   setelah masuk lewat tab **Akun**. Peran akun lain dinaikkan Super Admin di **Akun → Akun Terdaftar & Peran**.
 
+**Uji regresi autentikasi** (42 pemeriksaan; memakai salinan database, tanpa API key):
+
+```bash
+npm run test:auth
+```
+
 **Reset / isi ulang data dummy** (menghapus rekomendasi & meng-generate ulang data kuis):
 
 ```bash
@@ -403,6 +409,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | `lib/pdf.js` | Ekstraktor teks PDF zero-dependency (FlateDecode via `node:zlib`) |
 | `lib/vendor/vec0.dylib` | Ekstensi `sqlite-vec` (macOS arm64) untuk dev native; di Docker diganti `vec0.so` Linux |
 | `scripts/ingest_legal_pdf.py` | Ingest CLI massal PDF hukum (pypdf + Gemini) → menulis ke tabel RAG yang sama; `npm run ingest-legal` |
+| `scripts/test_auth.js` | Uji regresi autentikasi (42 pemeriksaan) di atas salinan DB; `npm run test:auth` |
 | `docker/` | Berkas Docker: `Dockerfile`, `docker-compose.yml`, `Dockerfile.dockerignore`. Image portabel (sqlite-vec; app zero-dependency); embedding RAG via Gemini API saat runtime. Konteks build = root |
 | `data/` | DB runtime SQLite (`data/auditor.db` + WAL) — auto-dibuat, di-gitignore; mirror volume Docker `/app/data` |
 | `lib/auth.js` | Autentikasi: hash scrypt, validasi pendaftaran, sesi + cookie, throttle login, bootstrap akun staf |
@@ -456,12 +463,17 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
   kurikulum & sesi kuis miliknya sendiri — `employee_id` diambil dari sesi, bukan dari body request.
 - **Pendaftaran mandiri hanya menghasilkan peran `employee` (Peserta Audit)**; kenaikan peran
   dilakukan Super Admin. Menonaktifkan akun langsung mencabut seluruh sesinya.
+- **Cookie sesi menyesuaikan protokol**: atribut `Secure` dipasang otomatis saat request datang
+  lewat HTTPS — dideteksi dari header `X-Forwarded-Proto` (reverse proxy) atau koneksi TLS
+  langsung. Di `http://localhost` atribut itu sengaja tidak dipasang, karena browser menolak
+  mengirim balik cookie `Secure` lewat HTTP sehingga login lokal akan mati. Paksa nilainya
+  dengan `COOKIE_SECURE=1` (atau `0`) di `.env` bila arsitektur Anda tidak terdeteksi otomatis.
 - **API key di `.env`** — sudah tercantum di `.gitignore`. **Jangan commit `.env`** ke repo publik.
   Jika key pernah terekspos, **rotate** di <https://console.groq.com/keys>.
 
-> Untuk deployment nyata: jalankan di belakang HTTPS (tambahkan atribut `Secure` pada cookie di
-> `lib/auth.js`), ganti kata sandi akun staf bawaan setelah run pertama, dan set `SEED_PASSWORD`
-> sendiri sebelum server dijalankan pertama kali.
+> Untuk deployment nyata: jalankan di belakang HTTPS (cookie akan otomatis ber-`Secure`; pastikan
+> reverse proxy meneruskan `X-Forwarded-Proto`), ganti kata sandi akun staf bawaan setelah run
+> pertama, dan set `SEED_PASSWORD` sendiri sebelum server dijalankan pertama kali.
 
 ---
 
