@@ -133,7 +133,21 @@ Output:
 > Bila `GEMINI_API_KEY` belum disetel, server tetap menyala (ada peringatan `RAG init warning`)
 > namun impor PDF & retrieval RAG tidak aktif sampai key diisi.
 
-Buka **<http://localhost:3000>** di browser, lalu pilih peran untuk masuk (mode demo, tanpa password).
+Buka **<http://localhost:3000>** di browser. Layar pertama adalah **Masuk / Daftar**:
+
+- **Daftar** — siapa pun dapat membuat akun sendiri; akun baru selalu berperan **Peserta Audit**.
+  Panel kiri menampilkan *register kontrol pendaftaran* yang tercentang mengikuti isian formulir.
+- **Masuk** — akun staf bawaan disiapkan otomatis saat server pertama kali dijalankan, dengan
+  kata sandi awal **`Auditor#2026`** (ubah lewat `SEED_PASSWORD` di `.env` sebelum run pertama):
+
+  | Email | Peran |
+  |-------|-------|
+  | `admin@company.co.id` | Super Admin |
+  | `auditor@company.co.id` | IT Auditor |
+  | `director@company.co.id` | Direktur |
+
+  Kata sandi awal juga dicetak di konsol server saat pertama kali disiapkan. **Ganti kata sandi**
+  setelah masuk lewat tab **Akun**. Peran akun lain dinaikkan Super Admin di **Akun → Akun Terdaftar & Peran**.
 
 **Reset / isi ulang data dummy** (menghapus rekomendasi & meng-generate ulang data kuis):
 
@@ -232,7 +246,8 @@ docker buildx build -f docker/Dockerfile --platform linux/arm64 -t llm-auditor:a
 
 ## Cara Pakai (per Peran)
 
-Di layar login, pilih salah satu peran:
+Peran melekat pada akun yang dipakai untuk masuk (bukan dipilih di layar login).
+Menu sidebar menyesuaikan peran tersebut; endpoint API juga memeriksanya di sisi server.
 
 ### 🛡️ Super Admin — akses penuh
 1. **Overview** — lihat statistik & skor rata-rata per divisi/topik.
@@ -259,7 +274,8 @@ Rekomendasi Topik Kuis, dan mengirim rekomendasi ke Direktur.
 3. Klik **✅ Acknowledge** → status berubah menjadi *Acknowledged* beserta nama & waktu.
 
 ### 👤 Peserta Audit
-1. Di layar login, pilih **Peserta Audit** lalu **pilih nama** dari daftar → **Masuk**.
+1. **Daftar** akun (nama, email kantor, divisi, kata sandi) → langsung masuk sebagai peserta,
+   atau **Masuk** dengan akun peserta yang sudah ada.
 2. Tab **Kuis Perbaikan** menampilkan **gap pengetahuan Anda** — topik dengan skor di bawah
    rata-rata pribadi (dideteksi via SQL view; query bisa dilihat di *"Lihat query SQL pendeteksi gap"*).
 3. Klik **▶ Mulai Kuis** pada sebuah topik → agen **ReAct** merencanakan sub-konsep, menarik
@@ -310,28 +326,38 @@ pertanyaan gap dengan benar (kolom `is_gap = 1` menandai gap):
 
 ## Referensi API
 
-Semua endpoint mengembalikan JSON. Endpoint dengan kontrol akses membaca header **`x-role`**
-(`super_admin` | `auditor` | `director`).
+Semua endpoint mengembalikan JSON. Kecuali endpoint `/api/auth/*` pra-login, **semua endpoint
+membutuhkan sesi login** (cookie `sid`, HttpOnly) dan mengembalikan `401` bila tidak ada sesi.
+Peran diambil dari akun pada sesi tersebut — tidak ada lagi header `x-role`.
 
 | Method | Endpoint | Akses | Keterangan |
 |--------|----------|-------|------------|
-| GET | `/api/overview` | semua | Statistik + rata-rata per divisi/topik |
-| GET | `/api/divisions` · `/api/topics` · `/api/employees` | semua | Data referensi |
-| GET | `/api/gaps/employee?id=` | semua | Gap per karyawan |
-| GET | `/api/gaps/division?id=` | semua | Gap per divisi |
-| GET | `/api/trend?division=&topic=&months=` | semua | Tren skor bulanan (lihat di bawah) |
-| POST | `/api/ai/recommendation` | semua | **Fitur 1** — body `{scope_type, scope_ref}` |
-| POST | `/api/ai/quiz-topics` | semua | **Fitur 2** — body `{scope_type, scope_ref}` |
+| GET | `/api/auth/divisions` | publik | Daftar divisi untuk formulir pendaftaran |
+| POST | `/api/auth/register` | publik | Body `{name, email, password, division_id}` → buat akun peserta + sesi |
+| POST | `/api/auth/login` | publik | Body `{email, password}` → sesi (maks 8 percobaan gagal / 10 menit) |
+| GET | `/api/auth/me` | login | Akun pada sesi berjalan |
+| POST | `/api/auth/logout` | login | Akhiri sesi |
+| POST | `/api/auth/password` | login | Body `{current_password, new_password}` |
+| GET | `/api/admin/users` | `super_admin` | Daftar akun terdaftar + peran & status |
+| POST | `/api/admin/users/:id/role` | `super_admin` | Body `{role}` — `employee`/`auditor`/`director`/`super_admin` |
+| POST | `/api/admin/users/:id/status` | `super_admin` | Body `{status}` — `active`/`disabled` (sesi akun langsung dicabut) |
+| GET | `/api/overview` | staf | Statistik + rata-rata per divisi/topik |
+| GET | `/api/divisions` · `/api/topics` · `/api/employees` | login | Data referensi (`/api/employees`: staf) |
+| GET | `/api/gaps/employee?id=` | staf | Gap per karyawan |
+| GET | `/api/gaps/division?id=` | staf | Gap per divisi |
+| GET | `/api/trend?division=&topic=&months=` | staf | Tren skor bulanan (lihat di bawah) |
+| POST | `/api/ai/recommendation` | staf | **Fitur 1** — body `{scope_type, scope_ref}` |
+| POST | `/api/ai/quiz-topics` | staf | **Fitur 2** — body `{scope_type, scope_ref}` |
 | POST | `/api/sql-agent` | `super_admin` | **Fitur 3** — body `{question}` |
-| GET | `/api/recommendations?status=` | semua | Daftar rekomendasi |
+| GET | `/api/recommendations?status=` | staf | Daftar rekomendasi |
 | POST | `/api/recommendations` | `super_admin`/`auditor` | Kirim rekomendasi |
 | POST | `/api/recommendations/:id/acknowledge` | `director` | Acknowledge |
-| GET | `/api/participant/curriculum?id=` | peserta | **Fitur 7** — daftar 10 topik + status (SQL view) + query-nya |
-| POST | `/api/quiz/generate` | peserta | **Fitur 7/9** — body `{employee_id, topic_id}` → 10 soal (ReAct+RAG). Respons memuat `method`, `grounded`, `trace`, `sources`. |
+| GET | `/api/participant/curriculum?id=` | login | **Fitur 7** — daftar 10 topik + status (SQL view) + query-nya. Peserta selalu mendapat datanya sendiri; `id=` hanya berlaku untuk staf. |
+| POST | `/api/quiz/generate` | login | **Fitur 7/9** — body `{topic_id}` → 10 soal (ReAct+RAG) untuk akun pada sesi. Respons memuat `method`, `grounded`, `trace`, `sources`. |
 | POST | `/api/quiz/submit` | peserta | **Fitur 7** — body `{session_id, answers:[idx,…]}` → nilai + update skor |
-| GET | `/api/settings` | semua | Toggle `quizUseReact`/`quizUseRag` + status RAG |
+| GET | `/api/settings` | login | Toggle `quizUseReact`/`quizUseRag` + status RAG |
 | POST | `/api/settings` | `super_admin` | Ubah toggle ReAct/RAG |
-| GET | `/api/pdf/documents` | semua | **Fitur 8** — daftar dokumen PDF + status RAG |
+| GET | `/api/pdf/documents` | login | **Fitur 8** — daftar dokumen PDF + status RAG |
 | POST | `/api/pdf/import` | `super_admin` | **Fitur 8** — unggah PDF (body biner `application/pdf`, header `X-Filename`) |
 | DELETE | `/api/pdf/documents/:id` | `super_admin` | **Fitur 8** — hapus dokumen dari basis pengetahuan |
 | POST | `/api/pdf/search` | `super_admin` | **Fitur 8** — body `{query}` → potongan teks paling relevan (uji retrieval) |
@@ -342,9 +368,14 @@ Semua endpoint mengembalikan JSON. Endpoint dengan kontrol akses membaca header 
 
 Contoh:
 ```bash
-curl "http://localhost:3000/api/trend?division=2&months=3"
-curl -X POST http://localhost:3000/api/sql-agent \
-  -H "x-role: super_admin" -H "Content-Type: application/json" \
+curl -b sid.txt "http://localhost:3000/api/trend?division=2&months=3"
+# Simpan cookie sesi lebih dulu, lalu pakai untuk endpoint ber-peran
+curl -c sid.txt -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@company.co.id","password":"Auditor#2026"}'
+
+curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
+  -H "Content-Type: application/json" \
   -d '{"question":"5 karyawan dengan skor rata-rata terendah"}'
 ```
 
@@ -364,7 +395,9 @@ curl -X POST http://localhost:3000/api/sql-agent \
 | `scripts/ingest_legal_pdf.py` | Ingest CLI massal PDF hukum (pypdf + Gemini) → menulis ke tabel RAG yang sama; `npm run ingest-legal` |
 | `docker/` | Berkas Docker: `Dockerfile`, `docker-compose.yml`, `Dockerfile.dockerignore`. Image portabel (sqlite-vec; app zero-dependency); embedding RAG via Gemini API saat runtime. Konteks build = root |
 | `data/` | DB runtime SQLite (`data/auditor.db` + WAL) — auto-dibuat, di-gitignore; mirror volume Docker `/app/data` |
-| `public/index.html` | Struktur dashboard & login (termasuk tab **Pengaturan**) |
+| `lib/auth.js` | Autentikasi: hash scrypt, validasi pendaftaran, sesi + cookie, throttle login, bootstrap akun staf |
+| `public/index.html` | Struktur layar **Masuk/Daftar**, dashboard, tab **Pengaturan** & **Akun** |
+| `public/auth.css` | Tampilan layar Masuk/Daftar (register kontrol "kertas kerja" + stempel) |
 | `public/app.js` | Logika frontend (fetch API, render tabel/markdown, **chart SVG tren**, PDF importer, jejak ReAct) |
 | `public/styles.css` | Tema dashboard |
 | `.claude/launch.json` | Konfigurasi preview dev-server (opsional) |
@@ -404,12 +437,21 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
   dan otomatis ditambah `LIMIT 200`. (Lihat `sanitizeSql()` di `lib/groq.js`.)
 - **Auto-repair**: bila query yang dihasilkan gagal dieksekusi, error dikirim balik ke LLM
   **satu kali** untuk diperbaiki sebelum hasil ditampilkan (ditandai badge *"diperbaiki otomatis"*).
-- **Kontrol akses berbasis peran** lewat header `x-role` (mengembalikan `403` bila tidak sesuai).
+- **Autentikasi nyata**: kata sandi di-hash **scrypt** (`node:crypto`, salt acak per akun,
+  perbandingan *timing-safe*); sesi berupa token acak 32 byte yang disimpan **ter-hash** di tabel
+  `sessions` dan dikirim sebagai cookie **HttpOnly · SameSite=Lax** (berlaku 7 hari).
+  Login dibatasi **8 percobaan gagal per email / 10 menit**.
+- **Kontrol akses berbasis peran di sisi server**: peran dibaca dari sesi, bukan dari input klien
+  (mengembalikan `401` tanpa sesi, `403` bila peran tidak sesuai). Peserta hanya bisa membuka
+  kurikulum & sesi kuis miliknya sendiri — `employee_id` diambil dari sesi, bukan dari body request.
+- **Pendaftaran mandiri hanya menghasilkan peran `employee` (Peserta Audit)**; kenaikan peran
+  dilakukan Super Admin. Menonaktifkan akun langsung mencabut seluruh sesinya.
 - **API key di `.env`** — sudah tercantum di `.gitignore`. **Jangan commit `.env`** ke repo publik.
   Jika key pernah terekspos, **rotate** di <https://console.groq.com/keys>.
 
-> Catatan: login demo tidak memakai password (untuk kemudahan evaluasi). Untuk produksi,
-> tambahkan autentikasi nyata sebelum mengandalkan kontrol peran.
+> Untuk deployment nyata: jalankan di belakang HTTPS (tambahkan atribut `Secure` pada cookie di
+> `lib/auth.js`), ganti kata sandi akun staf bawaan setelah run pertama, dan set `SEED_PASSWORD`
+> sendiri sebelum server dijalankan pertama kali.
 
 ---
 

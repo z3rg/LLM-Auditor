@@ -27,31 +27,12 @@ a { color: var(--brand); }
 button { font-family: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
-/* ---------- Login ---------- */
-#login {
-  min-height: 100vh; display: grid; place-items: center; padding: 24px;
-}
-.login-card {
-  width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow);
-}
+/* Layar Masuk/Daftar ada di auth.css. */
 .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .logo {
   width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
   background: linear-gradient(135deg, var(--brand), var(--brand-2)); font-weight: 800; font-size: 20px;
 }
-.login-card h1 { font-size: 20px; margin: 0; }
-.login-card .sub { color: var(--muted); margin: 4px 0 22px; }
-.role-list { display: grid; gap: 10px; margin-bottom: 18px; }
-.role-opt {
-  display: flex; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--border);
-  border-radius: 12px; background: var(--bg-2); cursor: pointer; transition: .15s;
-}
-.role-opt:hover { border-color: var(--brand); }
-.role-opt.active { border-color: var(--brand); background: var(--panel-2); box-shadow: 0 0 0 2px rgba(91,140,255,.25); }
-.role-opt .ic { font-size: 22px; }
-.role-opt .t { font-weight: 600; }
-.role-opt .d { color: var(--muted); font-size: 12.5px; }
 .btn {
   border: none; border-radius: 11px; padding: 11px 16px; font-weight: 600; color: #fff;
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
@@ -130,7 +111,7 @@ tbody tr:hover { background: var(--panel-2); }
 
 /* ---------- Controls ---------- */
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-select, input[type=text], textarea {
+select, input[type=text], input[type=password], input[type=email], textarea {
   background: var(--bg-2); color: var(--text); border: 1px solid var(--border);
   border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit;
 }

@@ -1,0 +1,26 @@
+# Dependencies (app inti zero-dependency; abaikan bila ada tooling Node lokal)
+node_modules/
+.npm-cache/
+.cache/
+
+# Python (skrip ingest scripts/ingest_legal_pdf.py) — virtualenv & bytecode
+.venv/
+__pycache__/
+
+# Database runtime (auto-dibuat di ./data, atau via DB_PATH)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets & OS
+.env
+.DS_Store
+*.log
+npm-debug.log*
+
+# Media & sumber presentasi (berat / bukan hasil build yang dipakai repo).
+# dokumentasi.pdf tetap dilacak sebagai versi terbitnya.
+*.mp4
+dokumentasi.pptx

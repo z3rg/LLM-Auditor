@@ -23,12 +23,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  if (state.role) headers['x-role'] = state.role;
-  return fetch(path, { ...opts, headers }).then(async (r) => {
+  return fetch(path, { credentials: 'same-origin', ...opts, headers }).then(async (r) => {
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    if (!r.ok) {
+      // Sesi kedaluwarsa saat aplikasi terbuka: kembalikan ke layar masuk.
+      if (r.status === 401 && state.role && !path.startsWith('/api/auth/')) sessionExpired();
+      throw new Error(data.error || `HTTP ${r.status}`);
+    }
     return data;
   });
+}
+
+function sessionExpired() {
+  state.role = null;
+  showAuth();
+  formMsg('#loginMsg', 'Sesi Anda berakhir. Masuk kembali untuk melanjutkan.', 'error');
 }
 
 function scoreClass(v) { return v >= 80 ? 'good' : v >= 70 ? 'info' : v >= 55 ? 'warn' : 'bad'; }
@@ -56,50 +65,181 @@ function md(src) {
 }
 
 // ---------------------------------------------------------------------------
-// Login
+// Masuk / Daftar
 // ---------------------------------------------------------------------------
-let pickedRole = null;
-$$('.role-opt').forEach((opt) => opt.addEventListener('click', async () => {
-  $$('.role-opt').forEach((o) => o.classList.remove('active'));
-  opt.classList.add('active');
-  pickedRole = opt.dataset.role;
-  const isParticipant = pickedRole === 'participant';
-  $('#participantPickWrap').classList.toggle('hidden', !isParticipant);
-  if (isParticipant) {
-    $('#loginBtn').disabled = !$('#participantPick').value;
-    if ($('#participantPick').options.length <= 1) {
-      try {
-        const list = await api('/api/employees');
-        $('#participantPick').innerHTML =
-          '<option value="">— pilih nama —</option>' +
-          list.map((e) => `<option value="${e.id}">${esc(e.name)} — ${esc(e.division)}</option>`).join('');
-      } catch (_) {}
-    }
-  } else {
-    $('#loginBtn').disabled = false;
-  }
-}));
-$('#participantPick').addEventListener('change', () => {
-  if (pickedRole === 'participant') $('#loginBtn').disabled = !$('#participantPick').value;
-});
-$('#loginBtn').addEventListener('click', () => {
-  if (pickedRole === 'participant') {
-    const sel = $('#participantPick');
-    if (!sel.value) return;
-    state.employeeId = Number(sel.value);
-    state.employeeName = sel.selectedOptions[0].textContent.split(' — ')[0];
-  }
-  enterApp(pickedRole);
-});
-$('#logoutBtn').addEventListener('click', () => location.reload());
+/** Server roles -> UI roles used for nav gating. */
+const uiRole = (role) => (role === 'employee' ? 'participant' : role);
 
-async function enterApp(role) {
-  state.role = role;
+// Kertas kerja kiri: kosong saat mode masuk (peran & cakupan akses tidak
+// diumbar sebelum login), berisi register kontrol saat mode daftar.
+const REG_CONTROLS = [
+  ['1.1', 'Nama lengkap terisi', () => $('#regName').value.trim().length >= 3],
+  ['1.2', 'Email berformat valid', () => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test($('#regEmail').value.trim())],
+  ['1.3', 'Divisi ditetapkan', () => !!$('#regDivision').value],
+  ['1.4', 'Kata sandi 8+ karakter, memuat angka', () => {
+    const v = $('#regPassword').value; return v.length >= 8 && /\d/.test(v);
+  }],
+  ['1.5', 'Konfirmasi kata sandi cocok', () => {
+    const v = $('#regPassword').value; return v.length > 0 && v === $('#regConfirm').value;
+  }],
+];
+
+let authMode = 'login';
+
+function renderRegister() {
+  const rows = $('#registerRows');
+  const panel = $('#paperRegister');
+  if (authMode === 'login') {
+    panel.classList.add('hidden');
+    rows.innerHTML = '';
+    setStamp('idle', 'Akses terkendali', 'sesi aman · 7 hari');
+    return;
+  }
+  panel.classList.remove('hidden');
+  const met = REG_CONTROLS.map(([, , test]) => { try { return test(); } catch (_) { return false; } });
+  const doneCount = met.filter(Boolean).length;
+  $('#registerTitle').textContent = 'Kontrol pendaftaran';
+  $('#registerCount').textContent = `${doneCount} / ${REG_CONTROLS.length} terpenuhi`;
+  rows.innerHTML = REG_CONTROLS.map(([no, label], i) => `
+    <li class="reg-row${met[i] ? ' is-met' : ''}">
+      <span class="no">${no}</span>
+      <span class="what">${esc(label)}</span>
+      <span class="mark">${met[i] ? '✓ sesuai' : 'belum'}</span>
+    </li>`).join('');
+  if (doneCount === REG_CONTROLS.length) setStamp('verified', 'Kontrol terpenuhi', 'siap dikirim');
+  else setStamp('pending', 'Belum lengkap', `${doneCount} dari ${REG_CONTROLS.length} kontrol`);
+}
+
+let stampState = '';
+function setStamp(stateName, line1, line2) {
+  const stamp = $('#authStamp');
+  $('#stampLine1').textContent = line1;
+  $('#stampLine2').textContent = line2;
+  if (stampState === stateName) return;   // jangan ulang animasi tiap ketikan
+  stampState = stateName;
+  stamp.dataset.state = stateName;
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  $('.paper').dataset.mode = mode;   // menentukan penempatan stempel di kertas kerja
+  $('#loginForm').classList.toggle('hidden', mode !== 'login');
+  $('#registerForm').classList.toggle('hidden', mode !== 'register');
+  $$('.mode-tab').forEach((t) => {
+    const on = t.dataset.mode === mode;
+    t.classList.toggle('is-active', on);
+    t.setAttribute('aria-selected', String(on));
+  });
+  moveUnderline();
+  renderRegister();
+  if (mode === 'register') loadRegisterDivisions();
+  const first = mode === 'login' ? $('#loginEmail') : $('#regName');
+  if (document.activeElement && document.activeElement.closest('#auth')) first.focus();
+}
+
+function moveUnderline() {
+  const active = $('.mode-tab.is-active');
+  const bar = $('#modeUnderline');
+  if (!active || !bar) return;
+  bar.style.width = `${active.offsetWidth}px`;
+  bar.style.transform = `translateX(${active.offsetLeft}px)`;
+}
+
+let divisionsLoaded = false;
+async function loadRegisterDivisions() {
+  if (divisionsLoaded) return;
+  try {
+    const list = await api('/api/auth/divisions');
+    $('#regDivision').innerHTML = '<option value="">Pilih divisi</option>' +
+      list.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    divisionsLoaded = true;
+  } catch (_) {
+    $('#regDivision').innerHTML = '<option value="">Gagal memuat divisi — muat ulang halaman</option>';
+  }
+}
+
+function formMsg(id, text, kind) {
+  const box = $(id);
+  box.className = `form-msg${kind ? ` is-${kind}` : ''}`;
+  box.textContent = text || '';
+}
+
+$$('.mode-tab').forEach((t) => t.addEventListener('click', () => setAuthMode(t.dataset.mode)));
+$$('#auth [data-goto]').forEach((b) => b.addEventListener('click', () => setAuthMode(b.dataset.goto)));
+$$('#auth .pw-toggle').forEach((btn) => btn.addEventListener('click', () => {
+  const input = $(`#${btn.dataset.target}`);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Sembunyikan' : 'Lihat';
+}));
+$('#registerForm').addEventListener('input', renderRegister);
+window.addEventListener('resize', moveUnderline);
+
+$('#loginForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const btn = $('#loginSubmit');
+  formMsg('#loginMsg', '');
+  btn.disabled = true; btn.textContent = 'Memeriksa…';
+  try {
+    const { user } = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: $('#loginEmail').value, password: $('#loginPassword').value }),
+    });
+    await enterApp(user);
+  } catch (e) {
+    formMsg('#loginMsg', e.message, 'error');
+    btn.disabled = false; btn.textContent = 'Masuk';
+  }
+});
+
+$('#registerForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const btn = $('#registerSubmit');
+  formMsg('#registerMsg', '');
+  if ($('#regPassword').value !== $('#regConfirm').value) {
+    return formMsg('#registerMsg', 'Konfirmasi kata sandi belum cocok.', 'error');
+  }
+  btn.disabled = true; btn.textContent = 'Membuat akun…';
+  try {
+    const { user } = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: $('#regName').value,
+        email: $('#regEmail').value,
+        password: $('#regPassword').value,
+        division_id: Number($('#regDivision').value),
+      }),
+    });
+    await enterApp(user);
+  } catch (e) {
+    formMsg('#registerMsg', e.message, 'error');
+    btn.disabled = false; btn.textContent = 'Buat akun';
+  }
+});
+
+$('#logoutBtn').addEventListener('click', async () => {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+  location.reload();
+});
+
+function showAuth() {
+  $('#app').classList.add('hidden');
+  $('#auth').classList.remove('hidden');
+  setAuthMode('login');
+  moveUnderline();
+}
+
+async function enterApp(user) {
+  state.user = user;
+  state.role = uiRole(user.role);
+  state.employeeId = user.id;
+  state.employeeName = user.name;
+  const role = state.role;
   try { state.config = await api('/api/config'); } catch (_) {}
-  const meta = ROLE_META[role];
+  const meta = ROLE_META[role] || ROLE_META.participant;
   $('#roleIcon').textContent = meta.icon;
-  $('#roleName').textContent = role === 'participant' ? state.employeeName : meta.name;
-  $('#modelName').textContent = role === 'participant' ? meta.name : (state.config.model || 'groq');
+  $('#roleName').textContent = user.name;
+  $('#modelName').textContent = user.division ? `${meta.name} · ${user.division}` : meta.name;
   // generic role-gated nav: show items whose data-roles includes this role
   let firstTab = null;
   $$('.nav-item[data-tab]').forEach((n) => {
@@ -108,7 +248,7 @@ async function enterApp(role) {
     n.classList.remove('active');
     if (allowed && !firstTab) firstTab = n;
   });
-  $('#login').classList.add('hidden');
+  $('#auth').classList.add('hidden');
   $('#app').classList.remove('hidden');
   if (role === 'participant') {
     loadNewQuiz();
@@ -138,7 +278,92 @@ $$('.nav-item[data-tab]').forEach((n) => n.addEventListener('click', () => {
   if (n.dataset.tab === 'trend') loadTrend();
   if (n.dataset.tab === 'newquiz') loadNewQuiz();
   if (n.dataset.tab === 'settings') loadSettings();
+  if (n.dataset.tab === 'account') loadAccount();
 }));
+
+// ---------------------------------------------------------------------------
+// Akun: profil, ganti kata sandi, pengelolaan peran (Super Admin)
+// ---------------------------------------------------------------------------
+const ROLE_LABEL = {
+  super_admin: 'Super Admin', auditor: 'IT Auditor',
+  director: 'Direktur', employee: 'Peserta Audit',
+};
+
+function loadAccount() {
+  const u = state.user;
+  if (!u) return;
+  $('#accountProfile').innerHTML = `
+    <span>Nama: <strong>${esc(u.name)}</strong></span>
+    <span>Email: <strong>${esc(u.email)}</strong></span>
+    <span>Divisi: <strong>${esc(u.division || '-')}</strong></span>
+    <span>Peran: <span class="pill info">${esc(ROLE_LABEL[u.role] || u.role)}</span></span>`;
+  const panel = $('#usersPanel');
+  panel.classList.toggle('hidden', u.role !== 'super_admin');
+  if (u.role === 'super_admin') loadUsers();
+}
+
+$('#passwordForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const msg = $('#pwMsg');
+  msg.innerHTML = '';
+  try {
+    await api('/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: $('#pwCurrent').value, new_password: $('#pwNew').value }),
+    });
+    msg.innerHTML = '<div class="notice ok">Kata sandi diperbarui.</div>';
+    $('#pwCurrent').value = ''; $('#pwNew').value = '';
+  } catch (e) {
+    msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
+  }
+});
+
+async function loadUsers() {
+  const box = $('#usersTable');
+  box.innerHTML = '<span class="spinner"></span> Memuat akun…';
+  try {
+    const { users, roles } = await api('/api/admin/users');
+    box.innerHTML = `
+      <div class="scroll-x"><table>
+        <thead><tr><th>Nama</th><th>Email</th><th>Divisi</th><th>Peran</th><th>Status</th><th></th></tr></thead>
+        <tbody>${users.map((u) => `
+          <tr>
+            <td>${esc(u.name)}${u.id === state.user.id ? ' <span class="pill muted">Anda</span>' : ''}</td>
+            <td><span class="muted">${esc(u.email)}</span></td>
+            <td><span class="muted">${esc(u.division)}</span></td>
+            <td>
+              <select data-role-for="${u.id}"${u.id === state.user.id ? ' disabled' : ''}>
+                ${roles.map((r) => `<option value="${r}"${r === u.role ? ' selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('')}
+              </select>
+            </td>
+            <td><span class="pill ${u.status === 'active' ? 'good' : 'muted'}">${u.status === 'active' ? 'Aktif' : 'Nonaktif'}</span>
+                ${u.active_sessions ? '<span class="pill info">sesi aktif</span>' : ''}</td>
+            <td>${u.id === state.user.id ? '' :
+              `<button class="btn ghost sm" data-status-for="${u.id}" data-next="${u.status === 'active' ? 'disabled' : 'active'}">${u.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</button>`}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+    box.querySelectorAll('select[data-role-for]').forEach((sel) =>
+      sel.addEventListener('change', () => updateUser(`/api/admin/users/${sel.dataset.roleFor}/role`, { role: sel.value })));
+    box.querySelectorAll('button[data-status-for]').forEach((btn) =>
+      btn.addEventListener('click', () => updateUser(`/api/admin/users/${btn.dataset.statusFor}/status`, { status: btn.dataset.next })));
+  } catch (e) {
+    box.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
+  }
+}
+
+async function updateUser(path, body) {
+  const msg = $('#usersMsg');
+  msg.innerHTML = '';
+  try {
+    const { user } = await api(path, { method: 'POST', body: JSON.stringify(body) });
+    msg.innerHTML = `<div class="notice ok">${esc(user.name)} diperbarui — ${esc(ROLE_LABEL[user.role] || user.role)}, ${user.status === 'active' ? 'aktif' : 'nonaktif'}.</div>`;
+    loadUsers();
+  } catch (e) {
+    msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
+    loadUsers();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -583,7 +808,8 @@ async function uploadPdfFiles(files) {
       const buf = await file.arrayBuffer();
       const r = await fetch('/api/pdf/import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/pdf', 'x-role': state.role, 'x-filename': encodeURIComponent(file.name) },
+        headers: { 'Content-Type': 'application/pdf', 'x-filename': encodeURIComponent(file.name) },
+        credentials: 'same-origin',
         body: buf,
       });
       const data = await r.json().catch(() => ({}));
@@ -896,3 +1122,15 @@ async function submitQuiz() {
     $('#quizValidateMsg').innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Boot: lanjutkan sesi yang masih berlaku, atau tampilkan layar masuk
+// ---------------------------------------------------------------------------
+(async function boot() {
+  try {
+    const { user } = await api('/api/auth/me');
+    await enterApp(user);
+  } catch (_) {
+    showAuth();
+  }
+})();
