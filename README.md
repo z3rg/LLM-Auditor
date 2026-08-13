@@ -155,6 +155,16 @@ Buka **<http://localhost:3000>** di browser. Layar pertama adalah **Masuk / Daft
 npm run seed
 ```
 
+> **Tentang `data/auditor.db` yang ikut di repo.** Snapshot demo ini sengaja dilacak agar repo
+> bisa langsung dijalankan lengkap dengan 391 hasil kuis dan indeks RAG 452 chunk dari tiga
+> dokumen POJK. Isinya data dummy; akun staf di dalamnya memakai kata sandi awal yang memang
+> sudah tertulis di README ini, jadi **anggap ketiga akun itu publik** dan ganti kata sandinya
+> pada instalasi yang Anda pakai sungguhan.
+>
+> Konsekuensinya: **jangan commit ulang database ini setelah Anda menyetel kata sandi asli** —
+> hash-nya akan ikut terpublikasi dan permanen di histori git. Untuk pemakaian nyata, biarkan
+> `data/` dibuat ulang secara lokal (`npm run seed`) atau arahkan `DB_PATH` ke luar repo.
+
 ### Ingest massal PDF hukum (CLI)
 
 Untuk memuat **PDF hukum berukuran besar** ke basis pengetahuan RAG tanpa lewat UI, tersedia
