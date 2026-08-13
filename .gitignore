@@ -20,7 +20,6 @@ data/
 *.log
 npm-debug.log*
 
-# Media & sumber presentasi (berat / bukan hasil build yang dipakai repo).
-# dokumentasi.pdf tetap dilacak sebagai versi terbitnya.
+# Media berat (rekaman demo tidak ikut ke repo).
+# dokumentasi.pptx dilacak sebagai satu-satunya sumber dek dokumentasi.
 *.mp4
-dokumentasi.pptx
