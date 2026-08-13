@@ -19,3 +19,8 @@ data/
 .DS_Store
 *.log
 npm-debug.log*
+
+# Media & sumber presentasi (berat / bukan hasil build yang dipakai repo).
+# dokumentasi.pdf tetap dilacak sebagai versi terbitnya.
+*.mp4
+dokumentasi.pptx
