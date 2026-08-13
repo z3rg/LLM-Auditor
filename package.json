@@ -8,6 +8,7 @@
     "start": "node server.js",
     "seed": "node -e \"require('./lib/db').reseed(); console.log('Database reseeded.')\"",
     "ingest-legal": "python3 scripts/ingest_legal_pdf.py",
+    "test:auth": "node scripts/test_auth.js",
     "docker:build": "docker build -f docker/Dockerfile -t llm-auditor .",
     "docker:run": "docker run --rm -p 3000:3000 --env-file .env -v auditor-data:/app/data llm-auditor",
     "docker:up": "docker compose -f docker/docker-compose.yml --env-file .env up --build -d",

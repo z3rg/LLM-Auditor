@@ -82,7 +82,9 @@ Browser ──/api/*──> server.js ──> lib/db.js (SQLite + view)
                                             └──> sqlite-vec (KNN)
 ```
 
-- **Autentikasi**: cookie sesi `sid` (HttpOnly, SameSite=Lax, 7 hari). Token acak 32 byte,
+- **Autentikasi**: cookie sesi `sid` (HttpOnly, SameSite=Lax, 7 hari; `Secure` ditambahkan
+  otomatis saat `isSecureRequest()` mendeteksi HTTPS — `X-Forwarded-Proto` dari reverse proxy,
+  koneksi TLS langsung, atau paksaan `COOKIE_SECURE`). Token acak 32 byte,
   disimpan **ter-hash SHA-256** di tabel `sessions`; kata sandi di-hash **scrypt** dengan salt
   per akun. `auth.currentUser(req)` me-resolve akun dari cookie di awal `api()` — seluruh
   endpoint di luar `/api/auth/*` menolak request tanpa sesi dengan `401`.
@@ -298,8 +300,9 @@ hukum `vec.js` (`parseHierarchyChunks`, deterministik tanpa jaringan), dan rekon
 ## 12. Ide Pengembangan Lanjutan
 
 - **OCR** untuk PDF hasil scan (mis. integrasi Tesseract opsional) agar importer lebih luas.
-- **Penguatan auth**: cookie `Secure` di belakang HTTPS, reset kata sandi lewat email,
-  verifikasi domain email perusahaan, 2FA, dan audit log percobaan login.
+- **Penguatan auth**: reset kata sandi lewat email, verifikasi domain email perusahaan, 2FA,
+  dan audit log percobaan login. (Atribut cookie `Secure` sudah otomatis mengikuti protokol —
+  lihat `isSecureRequest()` di `lib/auth.js`.)
 - **Multi-arch vendor sqlite-vec** ter-bundle untuk dev native lintas-OS (kini hanya macOS arm64).
 - **Hybrid retrieval** (gabung skor leksikal + semantik) dan **reranking**.
 - **Chunking lebih cerdas** (sadar heading/section) & dedup lintas-dokumen.

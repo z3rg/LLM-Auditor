@@ -106,7 +106,8 @@ Poin desain yang relevan untuk audit:
 
 - **Kata sandi tidak pernah disimpan apa adanya** — hash `scrypt` (`node:crypto`) dengan salt acak
   per akun dan perbandingan *timing-safe*. Token sesi pun disimpan **ter-hash**, sehingga isi tabel
-  `sessions` tidak cukup untuk membajak sesi.
+  `sessions` tidak cukup untuk membajak sesi. Atribut `Secure` dipasang otomatis begitu request
+  datang lewat HTTPS, dan sengaja dilepas di `http://localhost` agar login pengembangan tidak mati.
 - **Peran dibaca dari sesi di sisi server**, bukan dari input klien. Versi sebelumnya memakai header
   `x-role` yang bisa dipalsukan siapa pun dengan satu perintah `curl`.
 - **Identitas peserta tidak bisa disamarkan**: `employee_id` untuk pembuatan kuis diambil dari sesi,
@@ -377,6 +378,6 @@ logika gap ke dalam VIEW SQLite memberi dasar yang konsisten untuk rekomendasi A
   similarity Gemini yang sempit.
 - **Ambang grounding adaptif** per-query (mis. margin terhadap lantai-noise) alih-alih ambang tetap.
 - **OCR** untuk PDF hasil scan agar cakupan KB lebih luas.
-- **Penguatan autentikasi**: cookie `Secure` di belakang HTTPS, reset kata sandi via email,
-  verifikasi domain email perusahaan, 2FA, dan audit log percobaan login. (Autentikasi dasar —
-  registrasi, sesi, kontrol peran sisi server — sudah diterapkan; lihat §2.2.)
+- **Penguatan autentikasi**: reset kata sandi via email, verifikasi domain email perusahaan, 2FA,
+  dan audit log percobaan login. (Autentikasi dasar — registrasi, sesi, kontrol peran sisi server,
+  serta atribut cookie `Secure` yang mengikuti protokol — sudah diterapkan; lihat §2.2.)

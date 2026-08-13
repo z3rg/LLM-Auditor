@@ -456,12 +456,17 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
   kurikulum & sesi kuis miliknya sendiri — `employee_id` diambil dari sesi, bukan dari body request.
 - **Pendaftaran mandiri hanya menghasilkan peran `employee` (Peserta Audit)**; kenaikan peran
   dilakukan Super Admin. Menonaktifkan akun langsung mencabut seluruh sesinya.
+- **Cookie sesi menyesuaikan protokol**: atribut `Secure` dipasang otomatis saat request datang
+  lewat HTTPS — dideteksi dari header `X-Forwarded-Proto` (reverse proxy) atau koneksi TLS
+  langsung. Di `http://localhost` atribut itu sengaja tidak dipasang, karena browser menolak
+  mengirim balik cookie `Secure` lewat HTTP sehingga login lokal akan mati. Paksa nilainya
+  dengan `COOKIE_SECURE=1` (atau `0`) di `.env` bila arsitektur Anda tidak terdeteksi otomatis.
 - **API key di `.env`** — sudah tercantum di `.gitignore`. **Jangan commit `.env`** ke repo publik.
   Jika key pernah terekspos, **rotate** di <https://console.groq.com/keys>.
 
-> Untuk deployment nyata: jalankan di belakang HTTPS (tambahkan atribut `Secure` pada cookie di
-> `lib/auth.js`), ganti kata sandi akun staf bawaan setelah run pertama, dan set `SEED_PASSWORD`
-> sendiri sebelum server dijalankan pertama kali.
+> Untuk deployment nyata: jalankan di belakang HTTPS (cookie akan otomatis ber-`Secure`; pastikan
+> reverse proxy meneruskan `X-Forwarded-Proto`), ganti kata sandi akun staf bawaan setelah run
+> pertama, dan set `SEED_PASSWORD` sendiri sebelum server dijalankan pertama kali.
 
 ---
 
