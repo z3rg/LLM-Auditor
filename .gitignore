@@ -7,12 +7,15 @@ node_modules/
 .venv/
 __pycache__/
 
-# Database runtime (auto-dibuat di ./data, atau via DB_PATH)
-data/
+# Database runtime. Berkas WAL/SHM bersifat sementara — jangan pernah dilacak.
+data/*
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+# Kecuali snapshot demo: sengaja dilacak agar repo bisa langsung dijalankan
+# lengkap dengan data kuis + indeks RAG. Lihat catatan di README.
+!data/auditor.db
 
 # Secrets & OS
 .env
