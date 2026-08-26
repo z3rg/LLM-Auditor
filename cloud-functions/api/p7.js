@@ -1,5 +1,5 @@
 /** Probe ukuran: handler sepele + padding. */
-export default function onRequest(){return new Response(JSON.stringify({ok:true,probe:"p7-ukuran",bytes:107494}),{headers:{"Content-Type":"application/json"}});}
+export default function onRequest(){return new Response(JSON.stringify({ok:true,probe:"p7-ukuran",bytes:67088}),{headers:{"Content-Type":"application/json"}});}
 // padding:
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

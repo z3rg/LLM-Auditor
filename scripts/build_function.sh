@@ -23,6 +23,10 @@ OUT='cloud-functions/api/[[default]].js'
 #    dan kecurigaan itulah yang sedang diuji lewat salinan p6.js di bawah.
 BANNER='import{fileURLToPath as __f}from"node:url";import{dirname as __d}from"node:path";import{createRequire as __cr}from"node:module";const __filename=__f(import.meta.url);const __dirname=__d(__filename);if(!globalThis.require)globalThis.require=__cr(import.meta.url);'
 
+# --minify bukan sekadar penghematan byte: probe p7/p8 (336 KB berisi komentar)
+# lolos sementara artefak 107 KB berisi kode nyata ditolak, jadi yang dibatasi
+# builder tampaknya volume kode — bukan ukuran berkas.
+#
 # Driver Neon dibiarkan EXTERNAL: entry meng-import-nya sebagai import ESM asli
 # sehingga bundler platform yang meresolusinya. Saat driver ini di-inline,
 # artefaknya ditolak builder (rute tidak pernah terdaftar, 404).
@@ -31,6 +35,7 @@ npx esbuild functions-src/api-entry.mjs \
   --platform=node \
   --format=esm \
   --target=node20 \
+  --minify \
   --external:@neondatabase/serverless \
   --banner:js="$BANNER" \
   --outfile="$OUT" \
