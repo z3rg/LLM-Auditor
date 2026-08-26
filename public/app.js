@@ -894,7 +894,16 @@ async function submitQuiz() {
         <div class="row" style="margin-top:14px"><button class="btn sm" id="backToGaps">↺ Kembali ke daftar topik</button></div>
       </div>`;
     state.activeQuiz = null;
-    $('#backToGaps').addEventListener('click', ctx.reload);
+    // Panel hasil hidup di playBox, sedangkan reload() hanya menggambar ulang
+    // daftar topik di gapBox. Tanpa mengosongkan playBox lebih dulu, tombol
+    // ini terlihat tidak berfungsi: daftarnya memang dimuat ulang, tetapi
+    // hasil kuis tetap menutupi layar.
+    $('#backToGaps').addEventListener('click', () => {
+      ctx.playBox.innerHTML = '';
+      ctx.reload();
+      const gapBox = $('#newQuizGapBox');
+      if (gapBox && gapBox.scrollIntoView) gapBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     ctx.reload(); // refresh the topic list (the just-finished topic moves out of "belum dikerjakan")
   } catch (e) {
     btn.disabled = false; btn.innerHTML = '📤 Kumpulkan Jawaban';
