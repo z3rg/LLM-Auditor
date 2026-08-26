@@ -549,6 +549,12 @@ function canSubmit() { return state.role === 'super_admin' || state.role === 'au
 
 async function submitRecommendation() {
   const msg = $('#submitMsg');
+  // Jangan pernah mengirim rekomendasi hampa: kalau panggilan AI mengembalikan
+  // teks kosong, yang tersimpan di antrean Direktur adalah kartu tanpa isi.
+  if (!state.lastAiMarkdown || !String(state.lastAiMarkdown).trim()) {
+    msg.innerHTML = '<div class="notice err">Isi rekomendasi masih kosong — jalankan ulang AI Recommendation lebih dulu.</div>';
+    return;
+  }
   const body = {
     scope_type: state.lastGap.scope_type,
     scope_ref: state.lastGap.scope_ref,
