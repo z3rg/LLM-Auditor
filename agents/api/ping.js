@@ -19,8 +19,13 @@ export async function onRequest(context) {
     now: new Date().toISOString(),
     env: {
       MAKERS_MODELS_KEY: isSet('MAKERS_MODELS_KEY'),
-      EDGEONE_PROJECT_ID: isSet('EDGEONE_PROJECT_ID') || isSet('PAGES_PROJECT_ID'),
-      EDGEONE_BLOB_TOKEN: isSet('EDGEONE_BLOB_TOKEN') || isSet('PAGES_BLOB_DEPLOY_CREDENTIAL'),
+      // Dipisah per nama: platform menyuntikkan PAGES_PROJECT_ID sendiri, jadi
+      // menggabungkannya dengan EDGEONE_PROJECT_ID membuat variabel yang belum
+      // diisi terlihat seolah sudah — itu sempat menyesatkan diagnosis.
+      EDGEONE_PROJECT_ID: isSet('EDGEONE_PROJECT_ID'),
+      PAGES_PROJECT_ID: isSet('PAGES_PROJECT_ID'),
+      EDGEONE_BLOB_TOKEN: isSet('EDGEONE_BLOB_TOKEN'),
+      PAGES_BLOB_DEPLOY_CREDENTIAL: isSet('PAGES_BLOB_DEPLOY_CREDENTIAL'),
       BLOB_STORE_NAME: isSet('BLOB_STORE_NAME'),
     },
     // Ringkasan siap-tidaknya, supaya satu panggilan cukup untuk tahu apa yang kurang.
