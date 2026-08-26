@@ -92,7 +92,7 @@ ok "DATABASE_URL terpasang"
 
 # --- 3. Dependency & penyiapan database -------------------------------------
 if [ ! -d node_modules ]; then
-  info "Memasang dependency (express + driver Neon)…"
+  info "Memasang dependency (driver Neon)…"
   npm install --no-audit --no-fund || { err "npm install gagal."; exit 1; }
 fi
 ok "Dependency siap"

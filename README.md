@@ -6,8 +6,8 @@ bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → 
 
 > **Serverless-first**: berjalan di **EdgeOne Makers** — frontend statis + API sebagai Cloud
 > Function — dengan seluruh state di **Postgres (Neon) + pgvector**. Dependency runtime-nya dua:
-> `express` dan driver HTTP `@neondatabase/serverless`; sisanya modul bawaan Node
-> (`node:http`, `node:crypto`, `node:zlib`, `fetch`).
+> satu-satunya driver HTTP `@neondatabase/serverless`; sisanya modul bawaan Node
+> (`node:http`, `node:stream`, `node:crypto`, `node:zlib`, `fetch`).
 > **Embedding RAG memakai Google Gemini** (`gemini-embedding-001`, 3072-dim) lewat `fetch` —
 > butuh **`GEMINI_API_KEY`**. Tidak ada model lokal atau fallback leksikal: tanpa key, fitur
 > RAG (impor PDF & retrieval) tidak aktif.
@@ -97,7 +97,7 @@ GEMINI_EMBED_MODEL=gemini-embedding-001     # default; 3072-dim
 Lalu pasang dependency dan siapkan database sekali saja:
 
 ```bash
-npm install        # express + driver Neon
+npm install        # driver Neon
 npm run db:setup   # terapkan db/schema.sql, isi data dummy, siapkan akun staf
 ```
 
@@ -358,7 +358,7 @@ docker buildx build -f docker/Dockerfile --platform linux/arm64 -t llm-auditor:a
 |-----|------------|
 | **Persistensi** | Tidak ada di kontainer — seluruh state di Postgres (Neon) lewat `DATABASE_URL`. Kontainer boleh dibuang kapan saja. |
 | **Embedding** | Memakai **Gemini API** saat runtime — berikan `GEMINI_API_KEY` (env atau via `.env`). Tanpa key, fitur RAG nonaktif; fitur LLM lain tetap jalan. Tidak ada model lokal di image. |
-| **Dependency** | `npm ci --omit=dev` di stage terpisah (express + driver Neon), jadi lapisan cache tidak batal setiap kali kode berubah. |
+| **Dependency** | `npm ci --omit=dev` di stage terpisah (driver Neon), jadi lapisan cache tidak batal setiap kali kode berubah. |
 | **Keamanan** | Kontainer berjalan sebagai user non-root `node`. `.env`, `data/` & `*.db` lokal **tidak** ikut ke image (lihat `docker/Dockerfile.dockerignore`). |
 | **Healthcheck** | Tersedia probe ke `/api/config`. |
 
@@ -506,7 +506,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | Berkas | Peran |
 |--------|-------|
 | `server.js` | Entri **dev lokal**: HTTP server Node built-in + static files; memanggil router yang sama dengan produksi |
-| `cloud-functions/api/[[default]].js` | Entri **produksi**: Cloud Function EdgeOne (Express) yang mem-*mount* `lib/api.js` |
+| `cloud-functions/api/[[default]].js` | Entri **produksi**: adapter Fetch → req/res Node → `lib/api.js`, dengan watchdog agar tidak pernah menggantung |
 | `lib/api.js` | Router JSON API bebas framework — seluruh rute `/api/*`, dipakai bersama oleh kedua entri |
 | `lib/pg.js` | Koneksi Postgres lewat driver HTTP Neon (`query/one/many/exec/scalar`) |
 | `db/schema.sql` | DDL Postgres: tabel, index, dan kelima view analitik gap |

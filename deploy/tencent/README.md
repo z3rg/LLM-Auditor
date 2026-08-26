@@ -108,7 +108,7 @@ cd /opt/llm-auditor/deploy/tencent
 sudo docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Build memakan 1–3 menit (`npm ci` untuk Express + driver Neon). Verifikasi:
+Build memakan 1–3 menit (`npm ci` untuk driver Neon). Verifikasi:
 
 ```bash
 curl -s http://127.0.0.1/api/config

@@ -7,10 +7,10 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 
 ## 1. Filosofi & Stack
 
-- **Backend nyaris tanpa dependency**: dua paket runtime saja — `express` (kontrak Cloud Function
-  EdgeOne mensyaratkan instance framework di-export) dan `@neondatabase/serverless` (driver HTTP
-  Postgres). Selebihnya modul bawaan Node (`node:http`, `node:crypto`, `node:zlib`, `fetch`).
-  Tidak ada ORM, bundler, atau SDK vendor.
+- **Backend nyaris tanpa dependency**: satu paket runtime saja —
+  `@neondatabase/serverless` (driver HTTP Postgres). Selebihnya modul bawaan Node
+  (`node:http`, `node:stream`, `node:crypto`, `node:zlib`, `fetch`). Tidak ada framework web,
+  ORM, bundler, atau SDK vendor.
 - **Frontend tanpa build step**: HTML + CSS + satu file `app.js` vanilla. Tidak ada React/Vite.
 - **Data**: Postgres (Neon) + `pgvector` untuk vektor. Tidak ada state di filesystem — runtime
   EdgeOne bersifat ephemeral.
@@ -32,7 +32,9 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 server.js              Entri DEV LOKAL: HTTP server + static files + warmup RAG
 cloud-functions/
   package.json         {"type":"module"} — menandai folder ini ESM, lib/ tetap CommonJS
-  api/[[default]].js   Entri PRODUKSI: Cloud Function EdgeOne (Express) -> lib/api.js
+  api/[[default]].js   Entri PRODUKSI: adapter Fetch -> req/res Node -> lib/api.js
+  api/ping.js          Probe tanpa import: menguji runtime function
+  api/diag.js          Probe resolusi modul + env yang terpasang
 edgeone.json           Konfigurasi Makers: nodeVersion, outputDirectory, maxDuration 120s
 db/
   schema.sql           DDL Postgres: tabel, index, kelima view analitik gap
@@ -72,7 +74,7 @@ data/
 
 ```bash
 cp .env.example .env          # isi DATABASE_URL (Neon) + MAKERS_MODELS_KEY + GEMINI_API_KEY
-npm install                   # express + driver Neon
+npm install                   # driver Neon
 npm run db:setup              # terapkan skema, isi data dummy, siapkan akun staf
 node server.js                # atau ./start.sh
 npm run seed                  # reset data dummy

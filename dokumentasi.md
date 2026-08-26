@@ -83,7 +83,7 @@ Browser (public/) ──/api/*──> lib/api.js
 | Berkas | Peran |
 |--------|-------|
 | `lib/api.js` | Router API + gerbang sesi/peran; dipakai server dev lokal maupun Cloud Function |
-| `cloud-functions/api/[[default]].js` | Entri produksi EdgeOne Makers (Express) |
+| `cloud-functions/api/[[default]].js` | Entri produksi EdgeOne Makers: adapter Fetch → req/res Node |
 | `lib/auth.js` | Autentikasi: hash scrypt, sesi + cookie HttpOnly, throttle login, bootstrap akun staf |
 | `lib/db.js` | Akses data Postgres (async), seed deterministik, VIEW analitik gap, akun & `sessions` |
 | `lib/ai.js` | Wrapper Chat Completions OpenAI-compatible + fitur AI + **agen ReAct penyusun kuis** |

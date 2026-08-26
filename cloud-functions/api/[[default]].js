@@ -1,33 +1,125 @@
 /**
  * EdgeOne Makers Cloud Function — seluruh /api/* LLM Auditor.
  *
- * Nama berkas `[[default]].js` adalah pola catch-all multi-level Makers, dan
- * folder `api/` menjadi prefix URL-nya. Instance Express di-export (bukan
- * di-listen) sesuai kontrak platform.
+ * Memakai bentuk `onRequest(context) -> Response` seperti contoh quick start
+ * dokumentasi, BUKAN "export instance Express". Alasannya konkret: deployment
+ * pertama dengan Express selalu berakhir `Invoking task timed out after 120
+ * seconds` tanpa stack trace — handler terpanggil tapi tidak pernah membalas.
+ * Gaya Fetch menghapus dua ketidakpastian sekaligus: adaptor Express milik
+ * platform, dan bentuk objek res yang diberikannya.
  *
- * Logika rutenya sendiri ada di lib/api.js yang dipakai bersama server.js,
- * supaya perilaku lokal dan terdeploy tidak pernah bercabang.
+ * Router aplikasinya sendiri (lib/api.js) berbicara req/res gaya Node, jadi
+ * berkas ini yang menjembatani Fetch <-> Node. Tiga sifat yang disengaja:
+ *
+ *   1. Modul dimuat LAZY di dalam handler. Kegagalan import jadi balasan 500
+ *      yang bisa dibaca, bukan cold start yang mati diam-diam.
+ *   2. Ada watchdog. Apa pun yang menggantung dibalas 504 berisi keterangan
+ *      sebelum platform memotongnya di 120 detik tanpa jejak.
+ *   3. Tidak ada dependency framework. Body dibaca sekali lalu dialirkan ulang.
  */
-import express from 'express';
 import { createRequire } from 'node:module';
+import { Readable } from 'node:stream';
 
 // lib/ tetap CommonJS; folder ini ESM (lihat cloud-functions/package.json).
 const require = createRequire(import.meta.url);
-const apiRouter = require('../../lib/api.js');
 
-const app = express();
+// Batas aman di bawah maxDuration 120 detik, agar penyebabnya masih terlihat.
+const WATCHDOG_MS = Number(process.env.FUNCTION_WATCHDOG_MS || 100_000);
 
-// Tanpa body parser: router membaca stream mentah sendiri, baik untuk JSON
-// maupun untuk unggahan PDF biner.
-app.use((req, res) => {
-  // Platform bisa saja memangkas prefix mount sebelum sampai ke Express,
-  // sementara router mencocokkan path lengkap ('/api/config'). Kembalikan
-  // prefiksnya bila hilang agar kedua kemungkinan tertangani.
-  const url = req.url || '/';
-  if (!(url === '/api' || url.startsWith('/api/'))) {
-    req.url = '/api' + (url.startsWith('/') ? url : `/${url}`);
+let cachedRouter = null;
+function loadRouter() {
+  if (!cachedRouter) cachedRouter = require('../../lib/api.js');
+  return cachedRouter;
+}
+
+function json(status, obj) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  });
+}
+
+/** Request Fetch -> objek mirip IncomingMessage yang dipahami lib/api.js. */
+function toNodeRequest(request, url, bodyBuffer) {
+  const req = Readable.from(bodyBuffer && bodyBuffer.length ? [bodyBuffer] : []);
+  req.method = request.method;
+  req.url = url.pathname + url.search;
+  req.headers = Object.fromEntries(request.headers);
+  // lib/api.js memanggil req.destroy() saat body melewati batas.
+  if (typeof req.destroy !== 'function') req.destroy = () => {};
+  return req;
+}
+
+/** Objek mirip ServerResponse yang menyelesaikan sebuah Response Fetch. */
+function makeNodeResponse(resolve) {
+  const chunks = [];
+  let status = 200;
+  const headers = {};
+  return {
+    headersSent: false,
+    statusCode: 200,
+    setHeader(name, value) { headers[name] = value; },
+    getHeader(name) { return headers[name]; },
+    removeHeader(name) { delete headers[name]; },
+    writeHead(code, extra) {
+      status = code;
+      this.statusCode = code;
+      if (extra) for (const [k, v] of Object.entries(extra)) headers[k] = v;
+      this.headersSent = true;
+      return this;
+    },
+    write(chunk) {
+      if (chunk) chunks.push(Buffer.from(chunk));
+      return true;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(Buffer.from(chunk));
+      resolve(new Response(chunks.length ? Buffer.concat(chunks) : null, { status, headers }));
+    },
+  };
+}
+
+export default async function onRequest(context) {
+  // Bentuk context berbeda antar runtime: kadang Request langsung, kadang
+  // dibungkus. Terima keduanya daripada berasumsi.
+  const request = context && typeof context.method === 'string' ? context : context?.request;
+  if (!request) return json(500, { error: 'Request tidak ditemukan pada context function.' });
+
+  try {
+    const url = new URL(request.url);
+
+    // Platform bisa saja memangkas prefix mount sebelum sampai ke sini,
+    // sementara router mencocokkan path lengkap ('/api/config').
+    if (!(url.pathname === '/api' || url.pathname.startsWith('/api/'))) {
+      url.pathname = '/api' + (url.pathname.startsWith('/') ? url.pathname : `/${url.pathname}`);
+    }
+
+    const hasBody = !['GET', 'HEAD'].includes(request.method);
+    const bodyBuffer = hasBody ? Buffer.from(await request.arrayBuffer()) : null;
+
+    const router = loadRouter();
+    const req = toNodeRequest(request, url, bodyBuffer);
+
+    const handled = new Promise((resolve) => {
+      const res = makeNodeResponse(resolve);
+      router.handle(req, res);
+    });
+
+    let timer;
+    const watchdog = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(json(504, {
+        error: `Permintaan tidak selesai dalam ${Math.round(WATCHDOG_MS / 1000)} detik.`,
+        path: url.pathname,
+        hint: 'Cek DATABASE_URL (Neon) dan keterjangkauan jaringan dari function.',
+      })), WATCHDOG_MS);
+    });
+
+    const response = await Promise.race([handled, watchdog]);
+    clearTimeout(timer);
+    return response;
+  } catch (e) {
+    // Termasuk kegagalan import lib/: lebih baik terbaca sebagai 500 daripada
+    // hilang sebagai timeout tanpa jejak.
+    return json(500, { error: String(e && e.message || e), stack: String(e && e.stack || '').split('\n').slice(0, 4) });
   }
-  apiRouter.handle(req, res);
-});
-
-export default app;
+}

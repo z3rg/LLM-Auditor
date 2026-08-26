@@ -8,7 +8,6 @@
  */
 export default async function onRequest(context) {
   const targets = [
-    ['express', () => import('express')],
     ['@neondatabase/serverless', () => import('@neondatabase/serverless')],
     ['../../lib/api.js', () => import('../../lib/api.js')],
     ['../../lib/db.js', () => import('../../lib/db.js')],
