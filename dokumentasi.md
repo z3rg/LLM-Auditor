@@ -1,6 +1,6 @@
 # Dokumentasi Proyek — LLM Auditor
 
-> Aplikasi analitik hasil kuis **IT Auditor** lintas-divisi, ditenagai **Groq** (LLM) dan
+> Aplikasi analitik hasil kuis **IT Auditor** lintas-divisi, ditenagai **model bawaan EdgeOne Makers** (LLM) dan
 > **Google Gemini** (embedding RAG). Dokumen ini merangkum tujuan, arsitektur, alur kerja
 > **ReAct Agent**, cuplikan kode penting, hasil analisis, dan insight.
 >
@@ -19,13 +19,13 @@ bantuan LLM, melalui beberapa fitur inti:
 | Tujuan | Bagaimana dicapai |
 |--------|-------------------|
 | **Deteksi gap pengetahuan** per karyawan / divisi / topik | Logika gap (rata-rata skor `< 70`) dibakukan ke dalam **VIEW SQLite** (`v_employee_topic`, `v_division_topic`, dst.) agar konsisten |
-| **Rekomendasi perbaikan berbasis AI** | Groq menyusun analisis + rekomendasi + prioritas + penilaian risiko |
+| **Rekomendasi perbaikan berbasis AI** | LLM menyusun analisis + rekomendasi + prioritas + penilaian risiko |
 | **SQL Agent bahasa-natural** | Pertanyaan natural → query `SELECT` read-only (divalidasi + auto-repair) → tabel hasil |
 | **Kuis perbaikan yang _grounded_** | Agen **ReAct + RAG** menyusun soal yang berbasis materi regulasi (PDF) — **fokus dokumen ini** |
 | **Alur persetujuan** | Super Admin / Auditor → kirim rekomendasi → **Direktur** acknowledge |
 
 Prinsip teknis: **zero-dependency** pada inti aplikasi (hanya modul bawaan Node:
-`node:http`, `node:sqlite`, `node:zlib`, `fetch`). Layanan eksternal (Groq, Gemini) dipanggil
+`node:http`, `node:crypto`, `node:zlib`, `fetch`). Layanan eksternal (AI Gateway Makers, Gemini) dipanggil
 langsung via `fetch` tanpa SDK.
 
 ### 1.2 Dataset
@@ -75,7 +75,7 @@ Browser (public/) ──/api/*──> lib/api.js
    (static hosting)             (server.js lokal / Cloud Function EdgeOne)
                                   ├──> lib/auth.js ──> sesi (cookie HttpOnly) + peran
                                   ├──> lib/db.js   ──> Postgres (Neon) + VIEW analitik
-                                  ├──> lib/groq.js ──fetch──> Groq API   (LLM: llama-3.3-70b)
+                                  ├──> lib/ai.js   ──fetch──> AI Gateway Makers (deepseek-v4-flash)
                                   └──> lib/vec.js  ──> pgvector (cosine <=>)
                                             └──> lib/embedder.js ──fetch──> Gemini API (embedding)
 ```
@@ -86,7 +86,7 @@ Browser (public/) ──/api/*──> lib/api.js
 | `cloud-functions/api/[[default]].js` | Entri produksi EdgeOne Makers (Express) |
 | `lib/auth.js` | Autentikasi: hash scrypt, sesi + cookie HttpOnly, throttle login, bootstrap akun staf |
 | `lib/db.js` | Akses data Postgres (async), seed deterministik, VIEW analitik gap, akun & `sessions` |
-| `lib/groq.js` | Wrapper Groq + fitur AI + **agen ReAct penyusun kuis** |
+| `lib/ai.js` | Wrapper Chat Completions OpenAI-compatible + fitur AI + **agen ReAct penyusun kuis** |
 | `lib/vec.js` | RAG store: chunking (parser hukum), pencarian `pgvector` (cosine) |
 | `lib/embedder.js` | Embedder **Gemini-only** (3072-dim) via `fetch` |
 | `lib/pdf.js` | Ekstraktor teks PDF tanpa dependency (FlateDecode) |
@@ -138,7 +138,7 @@ sehingga RAG memengaruhi **tiap** soal — bukan satu pencarian untuk seluruh ku
                  ┌─────────────────────────── generateQuizReActPerQuestion() ──────────────────────────┐
                  │                                                                                      │
   /api/quiz/     │  1. PLAN (ReAct reasoning)                                                           │
-  generate  ───► │     planQuizSubtopics(topic, area, n)  ──fetch──► Groq                               │
+  generate  ───► │     planQuizSubtopics(topic, area, n)  ──fetch──► LLM                                │
                  │       └─► n sub-konsep berbeda + 1 query pencarian per sub-konsep                    │
                  │                                                                                      │
                  │  2. ACT — retrieval PER SOAL (loop n kali)                                           │
@@ -146,7 +146,7 @@ sehingga RAG memengaruhi **tiap** soal — bukan satu pencarian untuk seluruh ku
                  │       └─► grounded = (similarity_top ≥ GROUND_MIN 0.63) ? true : false (blend+tandai)│
                  │                                                                                      │
                  │  3. GENERATE (grounded, terfokus)                                                    │
-                 │     groundedGeneratePerQuestion(items) ──fetch──► Groq                               │
+                 │     groundedGeneratePerQuestion(items) ──fetch──► LLM                                │
                  │       └─► tepat 1 soal per "blok materi"; field `block` memetakan soal↔sumber        │
                  │                                                                                      │
                  │  4. ASSEMBLE → { questions[], trace, sources, groundedCount }                        │
@@ -164,7 +164,7 @@ Inti desain — **pemisahan tanggung jawab** agar output andal:
 
 **Blend + tandai:** bila sebuah sub-konsep tidak menemukan materi di atas ambang
 (`similarity < GROUND_MIN`), soal tetap dibuat dari pengetahuan umum IT-audit, namun **ditandai**
-`grounded:false` agar transparan (tidak diam-diam "pure Groq").
+`grounded:false` agar transparan (tidak diam-diam "pure LLM").
 
 ---
 
@@ -174,7 +174,7 @@ Inti desain — **pemisahan tanggung jawab** agar output andal:
 
 #### (a) Embedding via Gemini — `lib/embedder.js`
 
-Groq tidak punya endpoint embeddings, jadi vektor dihitung lewat Gemini. `taskType` dibedakan
+AI Gateway Makers hanya melayani chat completion, jadi vektor dihitung lewat Gemini. `taskType` dibedakan
 untuk dokumen vs query agar retrieval optimal:
 
 ```js

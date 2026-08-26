@@ -60,7 +60,7 @@ ok "Node.js $NODE_VER"
 if [ ! -f .env ]; then
   if [ -f .env.example ]; then
     cp .env.example .env
-    warn ".env belum ada — disalin dari .env.example. Isi GROQ_API_KEY Anda."
+    warn ".env belum ada — disalin dari .env.example. Isi DATABASE_URL dan MAKERS_MODELS_KEY Anda."
   else
     err ".env dan .env.example tidak ada. Tidak bisa lanjut."
     exit 1
@@ -72,12 +72,13 @@ fi
 # Baca nilai dari .env (tanpa dependency tambahan): strip CR & tanda kutip.
 read_env() { sed -n "s/^$1=//p" .env | head -1 | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'; }
 PORT="$(read_env PORT)"; PORT="${PORT:-3000}"
-API_KEY="$(read_env GROQ_API_KEY)"
+API_KEY="$(read_env MAKERS_MODELS_KEY)"
+[ -z "$API_KEY" ] && API_KEY="$(read_env GROQ_API_KEY)"
 if [ -z "$API_KEY" ] || [ "$API_KEY" = "your_groq_api_key_here" ]; then
-  warn "GROQ_API_KEY belum diisi di .env — fitur AI (rekomendasi, SQL Agent, kuis) tidak akan jalan."
-  warn "Dapatkan key gratis di https://console.groq.com/keys lalu isi di .env"
+  warn "Kunci LLM belum diisi di .env — fitur AI (rekomendasi, SQL Agent, kuis) tidak akan jalan."
+  warn "Ambil MAKERS_MODELS_KEY di konsol Makers → Models → API Key, atau pakai GROQ_API_KEY."
 else
-  ok "GROQ_API_KEY terpasang"
+  ok "Kunci LLM terpasang"
 fi
 
 DB_URL="$(read_env DATABASE_URL)"

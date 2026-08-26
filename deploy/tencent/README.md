@@ -27,7 +27,7 @@ region **Jakarta atau Singapore**, satu kontainer Docker, akses lewat `http://<I
 - Akun **Tencent Cloud International** (<https://intl.cloud.tencent.com>) yang sudah terverifikasi.
 - **DATABASE_URL** — database Postgres + pgvector di <https://neon.tech> (gratis). Aplikasi
   menyimpan seluruh state di sana; instance ini stateless.
-- **GROQ_API_KEY** — <https://console.groq.com/keys>
+- **MAKERS_MODELS_KEY** — konsol Makers → Models → API Key (atau `GROQ_API_KEY` sebagai alternatif)
 - **GEMINI_API_KEY** — <https://aistudio.google.com/apikey>
 - Kunci SSH publik Anda. Yang ada di mesin ini: `~/.ssh/id_ed25519.pub`.
 - Folder `deploy/` ini sudah ter-*push* ke GitHub (`z3rg/LLM-Auditor`), karena `bootstrap.sh`
@@ -82,7 +82,7 @@ Wajib diisi sebelum start pertama:
 
 ```ini
 DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require
-GROQ_API_KEY=gsk_...
+MAKERS_MODELS_KEY=...
 GEMINI_API_KEY=AIza...
 SEED_PASSWORD=<kata sandi kuat pilihan Anda>
 ```
@@ -115,7 +115,7 @@ curl -s http://127.0.0.1/api/config
 sudo docker compose -f docker-compose.prod.yml logs -f --tail=50
 ```
 
-`/api/config` yang sehat mengembalikan JSON berisi `"hasKey": true` (Groq terbaca) dan objek
+`/api/config` yang sehat mengembalikan JSON berisi `"hasKey": true` (kunci LLM terbaca) dan objek
 `rag`. Lalu buka `http://<IP-INSTANCE>` di browser dan login sebagai
 `admin@company.co.id` dengan `SEED_PASSWORD` tadi — **ganti kata sandi lewat tab Akun** setelah
 masuk.
@@ -168,7 +168,7 @@ kapan saja tanpa kehilangan data, dan `docker compose down -v` tidak lagi berbah
    Selama tahap ini, batasi juga port 80 ke IP kantor bila memungkinkan.
 2. **Satu instance, satu kontainer.** Tidak ada failover; kalau instance mati, aplikasi mati —
    tetapi datanya aman di Neon, jadi pemulihan berarti menyalakan kontainer lagi.
-3. **Kuota API.** Groq dan Gemini tier gratis punya rate limit; ingest PDF besar tetap perlu
+3. **Kuota API.** Model gateway Makers dan Gemini tier gratis punya batas; ingest PDF besar tetap perlu
    dijalankan bertahap.
 
 ### Menaikkan ke HTTPS nanti
@@ -206,7 +206,7 @@ pada cookie sesi — tidak ada perubahan kode yang diperlukan.
 |--------|-------------------|
 | `http://IP` tidak terbuka, tapi `curl` dari dalam server jalan | Port 80 belum dibuka di **firewall Lighthouse** (konsol), bukan di `ufw` |
 | Build terhenti / OOM | RAM 1 GB tanpa swap. Jalankan ulang `bootstrap.sh` (membuat swap) atau naikkan paket |
-| `"hasKey": false` di `/api/config` | `GROQ_API_KEY` kosong atau salah di `.env`; `$COMPOSE up -d` lagi setelah memperbaiki |
+| `"hasKey": false` di `/api/config` | `MAKERS_MODELS_KEY` kosong atau salah di `.env`; `$COMPOSE up -d` lagi setelah memperbaiki |
 | Fitur AI error / timeout | Uji jangkauan dari server: `curl -sI https://api.groq.com` dan `curl -sI https://generativelanguage.googleapis.com`. Kalau *hang*, instance ada di region daratan Tiongkok |
 | Semua endpoint 500 / "DATABASE_URL belum disetel" | `.env` belum berisi connection string Neon, atau skemanya belum dibuat — jalankan `npm run db:setup` |
 | Impor PDF gagal | `GEMINI_API_KEY` kosong, atau kena rate limit embed (tier gratis 100/menit) |

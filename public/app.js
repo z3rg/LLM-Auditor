@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 const state = {
   role: null,
-  config: { model: 'groq', gapThreshold: 70 },
+  config: { model: '', aiProvider: '', gapThreshold: 70 },
   lastGap: null,        // { scope_type, scope_ref, scope_label }
   lastAiMarkdown: '',
   lastQuizTopics: null,
@@ -958,7 +958,7 @@ async function loadNewQuiz() {
             <span>Soal per topik: <strong>${data.questionsPerTopic}</strong></span>
           </div>
         </div></div>
-        <div class="muted" style="margin-bottom:8px">Setiap peserta — baru maupun yang sudah pernah — melewati seluruh <strong>${data.totalTopics} topik</strong> secara berurutan. Soal dibuat oleh Groq (${data.questionsPerTopic} soal/topik) dan skor tercatat ke data.</div>
+        <div class="muted" style="margin-bottom:8px">Setiap peserta — baru maupun yang sudah pernah — melewati seluruh <strong>${data.totalTopics} topik</strong> secara berurutan. Soal dibuat oleh ${esc(state.config.aiProvider || "AI")} (${data.questionsPerTopic} soal/topik) dan skor tercatat ke data.</div>
         <div class="scroll-x"><table>
           <thead><tr><th>#</th><th>Topik</th><th>Area</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows}</tbody>

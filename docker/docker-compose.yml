@@ -18,7 +18,11 @@ services:
     environment:
       # Wajib: Postgres + pgvector (Neon).
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL wajib diisi di .env}
-      # Wajib untuk fitur AI Groq.
+      # Wajib untuk fitur AI (AI Gateway EdgeOne Makers, OpenAI-compatible).
+      MAKERS_MODELS_KEY: ${MAKERS_MODELS_KEY:-}
+      MAKERS_MODEL: ${MAKERS_MODEL:-@makers/deepseek-v4-flash}
+      # Jalur alternatif; dipakai otomatis bila kunci Makers kosong.
+      AI_PROVIDER: ${AI_PROVIDER:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
       # Wajib untuk RAG embedding (Gemini gemini-embedding-001).

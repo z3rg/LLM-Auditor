@@ -1,6 +1,6 @@
 # LLM Auditor
 
-Aplikasi analitik hasil kuis **IT Auditor** lintas divisi, ditenagai **Groq** (open-source LLM API).
+Aplikasi analitik hasil kuis **IT Auditor** lintas divisi, ditenagai **model bawaan EdgeOne Makers** lewat AI Gateway-nya yang OpenAI-compatible.
 Mengubah data kuis menjadi **rekomendasi AI untuk gap pengetahuan**, **saran topik kuis**, **SQL Agent**
 bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → Direktur**.
 
@@ -36,13 +36,13 @@ bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → 
 
 | # | Fitur | Keterangan |
 |---|-------|------------|
-| 1 | **AI Recommendation** | Analisis gap pengetahuan per **karyawan** atau **divisi**, lengkap dengan rekomendasi perbaikan, prioritas (Tinggi/Sedang/Rendah), dan penilaian risiko — dihasilkan oleh Groq. |
+| 1 | **AI Recommendation** | Analisis gap pengetahuan per **karyawan** atau **divisi**, lengkap dengan rekomendasi perbaikan, prioritas (Tinggi/Sedang/Rendah), dan penilaian risiko — dihasilkan oleh LLM. |
 | 2 | **Rekomendasi Topik Kuis** | Saran kuis prioritas + sub-topik + target skor untuk menutup gap (output JSON terstruktur). |
 | 3 | **SQL Agent (Super Admin)** | Tanya dalam bahasa natural → AI menyusun query **SQL read-only**, dieksekusi, hasil ditampilkan sebagai tabel. |
 | 4 | **Acknowledgement (Direktur)** | Super Admin/Auditor mengirim rekomendasi → Direktur **meninjau & acknowledge** dengan catatan. |
 | 5 | **Tren Skor per Waktu** | Grafik garis (SVG) rata-rata skor per bulan — mode **Keseluruhan / Per Divisi / Per Topik**, **filter rentang waktu (3/6/12 bulan / Semua)**, dan garis ambang gap. |
 | 6 | **Dashboard Overview** | Statistik ringkas + skor rata-rata per divisi & per topik. |
-| 7 | **Kuis Perbaikan (Peserta Audit)** | Peserta login → melihat **gap pengetahuan dirinya** (topik di bawah rata-rata, dideteksi via SQL view) → Groq men-*generate* **10 soal pilihan ganda** per topik (sesuai topik & area) → dijawab & dinilai (**maks 100**) → **skor di-insert ke `quiz_attempts`** sehingga rata-rata/gap membaik otomatis. |
+| 7 | **Kuis Perbaikan (Peserta Audit)** | Peserta login → melihat **gap pengetahuan dirinya** (topik di bawah rata-rata, dideteksi via SQL view) → LLM men-*generate* **10 soal pilihan ganda** per topik (sesuai topik & area) → dijawab & dinilai (**maks 100**) → **skor di-insert ke `quiz_attempts`** sehingga rata-rata/gap membaik otomatis. |
 | 8 | **PDF Importer → RAG (pgvector)** | Di tab **Pengaturan** (Super Admin), unggah PDF → teks diekstrak, dipotong dengan **parser hierarki hukum** (BAB/Pasal/Seksi/Poin, default), di-*embed* oleh **Gemini `gemini-embedding-001`** (3072-dim), lalu disimpan ke **Postgres + `pgvector`** sebagai basis pengetahuan. Butuh `GEMINI_API_KEY`. |
 | 9 | **Kuis berbasis ReAct + RAG (per soal)** | Saat membuat kuis, agen **ReAct** (Reason + Act) **merencanakan sub-konsep**, lalu memanggil `search_knowledge` **terpisah untuk SETIAP soal** menarik materi paling relevan dari PDF (RAG via pgvector), baru menyusun tiap soal yang *grounded* pada materinya. Setiap soal menampilkan **sumber PDF-nya**; bila materi tipis, soal disusun dari pengetahuan umum dan **ditandai** (blend). Jejak penalaran (Thought/Action/Observation) + rasio `grounded` ditampilkan di UI. |
 
@@ -56,8 +56,11 @@ Wajib:
 - **Database Postgres + pgvector di [Neon](https://neon.tech)** — tier gratis cukup. Driver yang
   dipakai berbicara lewat endpoint HTTP Neon, jadi `DATABASE_URL` harus URL Neon; Postgres di
   localhost tidak akan terhubung.
-- Koneksi internet untuk memanggil **Groq API** (fitur AI) dan **Gemini API** (embedding RAG).
-- **API key Groq** — gratis di <https://console.groq.com/keys>.
+- Koneksi internet untuk memanggil **AI Gateway Makers** (fitur AI) dan **Gemini API** (embedding RAG).
+- **`MAKERS_MODELS_KEY`** — konsol Makers → **Models → API Key**. Model bawaan
+  `@makers/deepseek-v4-flash` bisa dipakai tanpa kunci vendor sendiri.
+  Alternatif: **API key Groq** gratis di <https://console.groq.com/keys> (set `GROQ_API_KEY`,
+  otomatis dipakai bila kunci Makers kosong).
 - **API key Gemini** (untuk RAG/PDF importer) — gratis di <https://aistudio.google.com/apikey>.
 
 Opsional:
@@ -81,8 +84,9 @@ cp .env.example .env
 Edit `.env` dan isi key Anda:
 
 ```ini
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxx   # key dari console.groq.com
-GROQ_MODEL=llama-3.3-70b-versatile          # boleh diganti, mis. openai/gpt-oss-120b
+DATABASE_URL=postgresql://...neon.tech/... # Postgres + pgvector (Neon)
+MAKERS_MODELS_KEY=...                       # konsol Makers → Models → API Key
+MAKERS_MODEL=@makers/deepseek-v4-flash      # boleh diganti model lain di gateway
 PORT=3000
 
 # Embedding RAG (impor PDF & retrieval) — Gemini only:
@@ -107,7 +111,7 @@ npm run db:setup   # terapkan db/schema.sql, isi data dummy, siapkan akun staf
 > **Embedding RAG (untuk fitur PDF Importer)** memakai **Gemini `gemini-embedding-001`** — tidak
 > ada model lokal yang perlu diunduh atau dikonversi. Cukup isi `GEMINI_API_KEY` di `.env`
 > (atau via tab **Pengaturan → Konfigurasi Embedding** di UI). Tanpa key, app tetap berjalan
-> untuk semua fitur Groq, tetapi impor PDF & pencarian RAG **nonaktif** (tidak ada fallback lokal).
+> untuk semua fitur LLM, tetapi impor PDF & pencarian RAG **nonaktif** (tidak ada fallback lokal).
 
 ---
 
@@ -139,8 +143,9 @@ Output:
 
 ```
   LLM Auditor running:  http://localhost:3000
-  Groq model:           llama-3.3-70b-versatile
-  Groq key loaded:      yes
+  LLM provider:         EdgeOne Makers
+  LLM model:            @makers/deepseek-v4-flash
+  LLM key loaded:       yes
   Database:             Postgres (Neon)
   RAG embedder:         gemini:gemini-embedding-001 (dim 3072)
   RAG vector store:     pgvector (cosine) — 452 chunk
@@ -227,49 +232,72 @@ DATABASE_URL='postgresql://…neon.tech/neondb?sslmode=require' npm run db:setup
 DATABASE_URL='…' npm run db:migrate
 ```
 
-### 2. Hubungkan repo
+### 2. Ambil kunci model
 
-Buka <https://console.tencentcloud.com/edgeone/makers> → **New project** → pilih repositori ini →
-branch yang ingin dideploy. Konfigurasi build sudah ada di `edgeone.json`, jadi biarkan
-terdeteksi otomatis:
+Konsol Makers → **Models → API Key** → buat & salin. Itu satu-satunya kunci yang dibutuhkan untuk
+fitur AI: gateway menyediakan model bawaan (`@makers/deepseek-v4-flash`) tanpa perlu akun vendor.
 
-| Field | Nilai |
-|-------|-------|
-| Node version | `22.11.0` |
-| Install command | `npm install` |
-| Output directory | `public` |
-| Cloud function timeout | `120` detik (`cloudFunctions.nodejs.maxDuration`) |
+### 3. Deploy
 
-### 3. Isi environment variable
+Lewat CLI (paling langsung):
 
-Di **Project settings → Environment variables**:
+```bash
+npm install -g edgeone
+edgeone login                 # pilih region Global atau China
+edgeone makers link           # tautkan ke project; menarik env var konsol ke .env lokal
+edgeone makers deploy
+```
+
+Atau lewat konsol: **New project** → pilih repositori ini → branch `edgeone-deploy`. Setelan build
+sudah ada di `edgeone.json`, jadi biarkan terdeteksi otomatis:
+
+| Field | Nilai | Sumber |
+|-------|-------|--------|
+| Node version | `20.18.0` | `nodeVersion` — menyamai runtime Cloud Functions (v20.x) |
+| Install command | `npm install` | `installCommand` |
+| Output directory | `public` | `outputDirectory` — situs statis tanpa build step |
+| Function timeout | `120` detik | `cloudFunctions.nodejs.maxDuration` (default 30 detik, maks 120) |
+
+### 4. Isi environment variable
+
+Di **Project settings → Environment variables**, atau dari CLI (`edgeone makers env set KEY value`):
 
 | Variabel | Keterangan |
 |----------|------------|
 | `DATABASE_URL` | Connection string Neon — wajib |
-| `GROQ_API_KEY` | Fitur AI Groq |
-| `GROQ_MODEL` | Opsional, default `llama-3.3-70b-versatile` |
+| `MAKERS_MODELS_KEY` | Kunci AI Gateway Makers — wajib untuk fitur AI |
+| `MAKERS_MODEL` | Opsional, default `@makers/deepseek-v4-flash` |
 | `GEMINI_API_KEY` | Embedding RAG / impor PDF |
 | `GEMINI_EMBED_MODEL` | Opsional, default `gemini-embedding-001` |
 | `SEED_PASSWORD` | Hanya dibaca saat `npm run db:setup`, bukan saat runtime |
 
-### 4. Deploy & verifikasi
+Perubahan env var hanya berlaku untuk deployment **berikutnya**, tidak mengubah yang sudah jalan.
+
+### 5. Verifikasi
 
 ```bash
+edgeone makers dev            # emulasi lokal di http://localhost:8088
 curl -s https://<project>.edgeone.app/api/config
 ```
 
-Balasan yang sehat memuat `"hasKey": true` dan objek `rag`. Login lewat browser; karena EdgeOne
-mengakhiri TLS dan meneruskan `X-Forwarded-Proto: https`, cookie sesi otomatis ber-`Secure`
-tanpa perubahan konfigurasi.
+Balasan `/api/config` yang sehat memuat `"hasKey": true`, `"aiProvider": "EdgeOne Makers"`, dan
+objek `rag`. Login lewat browser; karena EdgeOne mengakhiri TLS dan meneruskan
+`X-Forwarded-Proto: https`, cookie sesi otomatis ber-`Secure` tanpa perubahan konfigurasi.
 
 ### Batas platform yang perlu diingat
 
 | Batas | Nilai | Dampak |
 |-------|-------|--------|
-| Durasi function | maks **120 detik** | Generate kuis ReAct memanggil Groq 2x + 12 embedding Gemini; jalur normal ±25-60 detik |
+| Durasi function | maks **120 detik** | Generate kuis ReAct memanggil LLM 2x + 12 embedding Gemini; jalur normal ±25-60 detik |
 | Body request | **6 MB** | Batas unggah PDF disamakan di `lib/api.js`; seluruh PDF POJK di repo < 600 KB |
-| Runtime | Node.js | Tidak ada filesystem persisten — karena itu state pindah ke Postgres |
+| Paket kode | **128 MB** | Termasuk `node_modules`; dua dependency runtime saja, jadi longgar |
+| Runtime | **Node.js v20.x** | Tidak ada filesystem persisten — karena itu state pindah ke Postgres |
+| Model | kuota token gratis terbatas | Bila habis: ganti `MAKERS_MODEL`, atau set `AI_PROVIDER=groq` + `GROQ_API_KEY` |
+
+> **Embedding tetap di Gemini.** AI Gateway Makers hanya melayani chat completion — tidak ada
+> endpoint embeddings — jadi `GEMINI_API_KEY` masih dibutuhkan untuk impor PDF & retrieval RAG.
+> Mengganti model embedding berarti dimensi vektor berubah dan seluruh 452 chunk harus di-embed
+> ulang, jadi jangan diubah tanpa alasan kuat.
 
 ---
 
@@ -278,7 +306,7 @@ tanpa perubahan konfigurasi.
 Alternatif dari EdgeOne, untuk menjalankan app di VM biasa. Kontainernya **stateless**: seluruh
 data ada di Postgres, jadi tidak ada volume dan tidak ada berkas database di dalam image.
 Kontainer melakukan panggilan jaringan saat runtime dan perlu tiga nilai — **`DATABASE_URL`**
-(Neon), **`GROQ_API_KEY`** (fitur AI Groq), dan **`GEMINI_API_KEY`** (embedding RAG / impor PDF).
+(Neon), **`MAKERS_MODELS_KEY`** (fitur AI), dan **`GEMINI_API_KEY`** (embedding RAG / impor PDF).
 
 Panduan lengkap sampai instance hidup: [`deploy/tencent/README.md`](deploy/tencent/README.md).
 
@@ -290,7 +318,7 @@ Panduan lengkap sampai instance hidup: [`deploy/tencent/README.md`](deploy/tence
 
 ```bash
 # 1) Siapkan key (sekali)
-cp .env.example .env          # lalu isi GROQ_API_KEY dan GEMINI_API_KEY
+cp .env.example .env          # lalu isi DATABASE_URL, MAKERS_MODELS_KEY, GEMINI_API_KEY
 
 # 2) Build + jalankan (dari root repo)
 docker compose -f docker/docker-compose.yml --env-file .env up --build -d
@@ -310,7 +338,7 @@ docker compose -f docker/docker-compose.yml down   # atau: npm run docker:down
 docker build -f docker/Dockerfile -t llm-auditor .   # atau: npm run docker:build
 docker run --rm -p 3000:3000 \
   -e DATABASE_URL='postgresql://…neon.tech/neondb?sslmode=require' \
-  -e GROQ_API_KEY=gsk_xxxxxxxx \
+  -e MAKERS_MODELS_KEY=... \
   -e GEMINI_API_KEY=AIza_xxxxxxxx \
   llm-auditor
 ```
@@ -329,7 +357,7 @@ docker buildx build -f docker/Dockerfile --platform linux/arm64 -t llm-auditor:a
 | Hal | Keterangan |
 |-----|------------|
 | **Persistensi** | Tidak ada di kontainer — seluruh state di Postgres (Neon) lewat `DATABASE_URL`. Kontainer boleh dibuang kapan saja. |
-| **Embedding** | Memakai **Gemini API** saat runtime — berikan `GEMINI_API_KEY` (env atau via `.env`). Tanpa key, fitur RAG nonaktif; fitur Groq lain tetap jalan. Tidak ada model lokal di image. |
+| **Embedding** | Memakai **Gemini API** saat runtime — berikan `GEMINI_API_KEY` (env atau via `.env`). Tanpa key, fitur RAG nonaktif; fitur LLM lain tetap jalan. Tidak ada model lokal di image. |
 | **Dependency** | `npm ci --omit=dev` di stage terpisah (express + driver Neon), jadi lapisan cache tidak batal setiap kali kode berubah. |
 | **Keamanan** | Kontainer berjalan sebagai user non-root `node`. `.env`, `data/` & `*.db` lokal **tidak** ikut ke image (lihat `docker/Dockerfile.dockerignore`). |
 | **Healthcheck** | Tersedia probe ke `/api/config`. |
@@ -371,7 +399,7 @@ Rekomendasi Topik Kuis, dan mengirim rekomendasi ke Direktur.
 2. Tab **Kuis Perbaikan** menampilkan **gap pengetahuan Anda** — topik dengan skor di bawah
    rata-rata pribadi (dideteksi via SQL view; query bisa dilihat di *"Lihat query SQL pendeteksi gap"*).
 3. Klik **▶ Mulai Kuis** pada sebuah topik → agen **ReAct** merencanakan sub-konsep, menarik
-   materi PDF **per soal** (RAG), lalu **Groq** membuat **10 soal** pilihan ganda yang
+   materi PDF **per soal** (RAG), lalu **LLM** membuat **10 soal** pilihan ganda yang
    *grounded* (sesuai topik & area), setiap soal 10 poin (maks 100). Tiap soal menampilkan
    **sumber PDF-nya** (atau tanda *pengetahuan umum* bila materi tipis), plus badge
    **📚 N/10 soal berbasis PDF** + jejak penalaran ReAct.
@@ -381,7 +409,7 @@ Rekomendasi Topik Kuis, dan mengirim rekomendasi ke Direktur.
 ### Alur lengkap (end-to-end)
 ```
 Fitur 3:  Super Admin/Auditor → AI Recommendation → "Kirim ke Direktur" → Direktur → ✅ Acknowledge
-Fitur 7:  Peserta → gap (SQL view) → Groq generate 10 soal → jawab & nilai → skor ter-update
+Fitur 7:  Peserta → gap (SQL view) → LLM generate 10 soal → jawab & nilai → skor ter-update
 ```
 
 ---
@@ -484,7 +512,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | `db/schema.sql` | DDL Postgres: tabel, index, dan kelima view analitik gap |
 | `edgeone.json` | Konfigurasi Makers: versi Node, output statis, `maxDuration` function 120 detik |
 | `lib/db.js` | Akses data Postgres (async): penerapan skema, seed deterministik, helper analitik gap & tren, akun/sesi/throttle, `app_settings` |
-| `lib/groq.js` | Wrapper Groq Chat Completions + fitur AI (rekomendasi, topik kuis, SQL Agent) + **generator kuis ReAct + RAG** |
+| `lib/ai.js` | Wrapper Chat Completions OpenAI-compatible (default: AI Gateway Makers, alternatif Groq) + fitur AI + **generator kuis ReAct + RAG** |
 | `lib/vec.js` | Basis pengetahuan RAG: chunking (**parser hierarki hukum** default + chunker paragraf generik) + pencarian **pgvector** (cosine) + reindex saat backend embedding berubah |
 | `lib/embedder.js` | Embedder **Gemini-only** (`gemini-embedding-001`, 3072-dim) via `fetch`; butuh `GEMINI_API_KEY`, tanpa fallback lokal |
 | `lib/pdf.js` | Ekstraktor teks PDF tanpa dependency (FlateDecode via `node:zlib`) |
@@ -504,7 +532,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 
 ### RAG & ReAct (Fitur 8 & 9)
 
-- **Embedding via Gemini** (`lib/embedder.js`): Groq tidak punya endpoint embeddings, jadi
+- **Embedding via Gemini** (`lib/embedder.js`): AI Gateway Makers hanya melayani chat completion, jadi
   vektor dihitung lewat **Google Gemini API** — **`gemini-embedding-001`** (3072-dim), dipanggil
   via `fetch` (`taskType` `RETRIEVAL_DOCUMENT` untuk chunk, `RETRIEVAL_QUERY` untuk query).
   Butuh **`GEMINI_API_KEY`** (dari `.env` atau panel **Konfigurasi Embedding** di UI; nilai DB
@@ -526,7 +554,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
   Toggle ReAct/RAG tersedia di tab **Pengaturan**.
 
 Alur data: `Browser → /api/* → lib/api.js → lib/db.js → Postgres (Neon)` dan
-`lib/api.js → lib/groq.js → Groq API` untuk fitur AI. Grafik tren digambar sebagai **SVG murni**
+`lib/api.js → lib/ai.js → AI Gateway Makers` untuk fitur AI. Grafik tren digambar sebagai **SVG murni**
 di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
 
 ---
@@ -565,9 +593,9 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
 
 | Masalah | Solusi |
 |---------|--------|
-| `Groq key loaded: NO` | Pastikan `GROQ_API_KEY` ada di `.env` dan server di-restart. |
-| Fitur AI error `Groq API 401` | Key salah/dicabut — buat key baru di console Groq. |
-| Fitur AI error `Groq API 429` | Rate limit tercapai — tunggu sebentar atau ganti model. |
+| `LLM key loaded: NO` | Pastikan `MAKERS_MODELS_KEY` ada di `.env` (atau `GROQ_API_KEY` bila memakai jalur alternatif) dan server di-restart. |
+| Fitur AI error `… API 401` | Key salah/dicabut — buat key baru di konsol Makers → Models → API Key. |
+| Fitur AI error `… API 429` | Kuota/rate limit tercapai — tunggu sebentar, ganti model lewat `MAKERS_MODEL`, atau set `AI_PROVIDER=groq`. |
 | `DATABASE_URL belum disetel` | Isi connection string Neon di `.env`, lalu `npm run db:setup`. |
 | `relation "employees" does not exist` | Skema belum diterapkan — jalankan `npm run db:setup`. |
 | Data ingin direset | `npm run seed` (mengosongkan tabel operasional lalu mengisi ulang data dummy). |

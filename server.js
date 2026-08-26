@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const apiRouter = require('./lib/api');
-const ai = require('./lib/groq');
+const ai = require('./lib/ai');
 const vec = require('./lib/vec');
 const auth = require('./lib/auth');
 
@@ -73,8 +73,10 @@ const server = http.createServer((req, res) => {
   const r = await vec.stats();
   server.listen(PORT, () => {
     console.log(`\n  LLM Auditor running:  http://localhost:${PORT}`);
-    console.log(`  Groq model:           ${ai.cfg().model}`);
-    console.log(`  Groq key loaded:      ${ai.cfg().key ? 'yes' : 'NO — set GROQ_API_KEY in .env'}`);
+    const aiCfg = ai.cfg();
+    console.log(`  LLM provider:         ${aiCfg.providerLabel}`);
+    console.log(`  LLM model:            ${aiCfg.model}`);
+    console.log(`  LLM key loaded:       ${aiCfg.key ? 'yes' : `NO — set ${aiCfg.keyEnv} in .env`}`);
     console.log(`  Database:             Postgres (Neon)`);
     console.log(`  RAG embedder:         ${r.embedder} (dim ${r.dim})`);
     console.log(`  RAG vector store:     ${r.backend} — ${r.chunks} chunk`);

@@ -1,4 +1,8 @@
 {
-  "//": "Menandai berkas .js di folder ini sebagai ESM. EdgeOne mensyaratkan cloud function meng-export default instance framework (sintaks ESM), sedangkan lib/ tetap CommonJS — resolusi Node menghormati package.json terdekat, jadi keduanya hidup berdampingan tanpa mengubah seluruh repo.",
-  "type": "module"
+  "//": "Dua peran. (1) \"type\": \"module\" menandai berkas .js di folder ini sebagai ESM — EdgeOne mensyaratkan cloud function meng-export default instance framework — sementara lib/ tetap CommonJS; resolusi Node menghormati package.json terdekat. (2) dependencies digandakan dari root karena builder EdgeOne memasang dependency dari package.json di direktori function; versinya harus tetap sama dengan root.",
+  "type": "module",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
+    "express": "^4.21.2"
+  }
 }

@@ -14,12 +14,14 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 - **Frontend tanpa build step**: HTML + CSS + satu file `app.js` vanilla. Tidak ada React/Vite.
 - **Data**: Postgres (Neon) + `pgvector` untuk vektor. Tidak ada state di filesystem — runtime
   EdgeOne bersifat ephemeral.
-- **LLM**: Groq (OpenAI-compatible Chat Completions) via `fetch`.
+- **LLM**: **AI Gateway EdgeOne Makers** (OpenAI-compatible Chat Completions) via `fetch`,
+  model bawaan `@makers/deepseek-v4-flash`. Groq tetap jadi jalur alternatif karena skemanya
+  identik — lihat `provider()` di `lib/ai.js`.
 - **Embedding RAG**: Google **Gemini** (`gemini-embedding-001`, 3072-dim) via `fetch` —
   panggilan jaringan, butuh `GEMINI_API_KEY`. Tidak ada model lokal; tidak ada fallback leksikal.
 
 > Prinsip saat menambah fitur: jangan menambah dependency kalau modul bawaan cukup, dan jangan
-> pernah menyimpan state di disk — layanan eksternal (Groq, Gemini) dipanggil langsung via
+> pernah menyimpan state di disk — layanan eksternal (AI Gateway Makers, Gemini) dipanggil langsung via
 > `fetch` tanpa SDK, dan apa pun yang harus bertahan masuk ke Postgres.
 
 ---
@@ -40,7 +42,7 @@ lib/
   pg.js                Koneksi Postgres via driver HTTP Neon (query/one/many/exec/scalar)
   db.js                Akses data Postgres (async): apply schema, seed deterministik, analitik gap, akun & sessions
   env.js               Pemuat .env mini untuk dev lokal
-  groq.js              Wrapper Groq + fitur AI + generator kuis ReAct
+  ai.js                Wrapper Chat Completions (default AI Gateway Makers, alternatif Groq) + fitur AI + generator kuis ReAct
   vec.js               RAG store: chunking (parser hukum + generik), pencarian pgvector (cosine), reindex
   embedder.js          Embedder Gemini-only (gemini-embedding-001, 3072-dim) via fetch
   pdf.js               Ekstraktor teks PDF (FlateDecode via zlib)
@@ -69,7 +71,7 @@ data/
 ## 3. Setup Dev Lokal
 
 ```bash
-cp .env.example .env          # isi DATABASE_URL (Neon) + GROQ_API_KEY + GEMINI_API_KEY
+cp .env.example .env          # isi DATABASE_URL (Neon) + MAKERS_MODELS_KEY + GEMINI_API_KEY
 npm install                   # express + driver Neon
 npm run db:setup              # terapkan skema, isi data dummy, siapkan akun staf
 node server.js                # atau ./start.sh
@@ -93,7 +95,7 @@ aktif, dan `rag.backend` selalu `pgvector (cosine)`.
 
 ```
 Browser ──/api/*──> lib/api.js ──> lib/db.js ──> lib/pg.js ──HTTP──> Postgres (Neon)
-       (server.js lokal /            ├──> lib/groq.js ──fetch──> Groq API
+       (server.js lokal /            ├──> lib/ai.js   ──fetch──> AI Gateway Makers
         cloud function di EdgeOne)   └──> lib/vec.js ──> lib/embedder.js ──fetch──> Gemini API
                                                    └──> pgvector (<=> cosine)
 ```
@@ -278,7 +280,7 @@ Semua berkas Docker ada di **`docker/`**; **konteks build = root repo**. Jalanka
   → `HEALTHCHECK` ke `/api/config`.
 
 Kontainernya **stateless** — tidak ada `VOLUME`, tidak ada berkas database. **Rahasia diberikan
-saat `docker run`/compose**: `DATABASE_URL` (Neon), `GROQ_API_KEY`, dan `GEMINI_API_KEY` — image
+saat `docker run`/compose**: `DATABASE_URL` (Neon), `MAKERS_MODELS_KEY`, dan `GEMINI_API_KEY` — image
 tidak menyimpan satu pun.
 
 `docker/Dockerfile.dockerignore` (BuildKit otomatis memakai `<dockerfile>.dockerignore`; pola
@@ -296,7 +298,10 @@ root via flag `--env-file .env`.
 
 | Var | Default | Fungsi |
 |-----|---------|--------|
-| `GROQ_API_KEY` | — | Key Groq (wajib untuk fitur AI) |
+| `MAKERS_MODELS_KEY` | — | Kunci AI Gateway Makers (wajib untuk fitur AI) |
+| `MAKERS_MODEL` | `@makers/deepseek-v4-flash` | Id model di gateway |
+| `AI_PROVIDER` | *(auto)* | Paksa `makers` atau `groq`; auto = `makers` bila kuncinya ada |
+| `GROQ_API_KEY` | — | Jalur alternatif bila tidak memakai gateway Makers |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | Model chat Groq |
 | `GEMINI_API_KEY` | — | Key Google Gemini (wajib untuk embedding RAG / impor PDF); bisa juga di-set via Settings UI |
 | `GEMINI_EMBED_MODEL` | `gemini-embedding-001` | Model embedding Gemini (3072-dim) |
@@ -320,7 +325,7 @@ Dua sifat yang membuatnya aman dijalankan kapan saja:
 
 - Berjalan di atas **database terpisah** lewat `TEST_DATABASE_URL` (branch Neon khusus uji), dan
   **menolak jalan** bila variabel itu kosong — karena langkah pertamanya mengosongkan semua tabel.
-- **Tidak memanggil Groq/Gemini**, jadi tidak butuh API key dan tidak menghabiskan kuota.
+- **Tidak memanggil LLM/Gemini**, jadi tidak butuh API key dan tidak menghabiskan kuota.
   Sesi kuis untuk uji kepemilikan disisipkan langsung ke tabel `quiz_sessions`.
 
 Menambah kasus uji: tulis `check('nama', kondisi)` di dalam blok yang relevan — helper `req()`
@@ -355,5 +360,5 @@ Tes embedder Gemini perlu key/jaringan, jadi cocok di-mock atau ditandai opsiona
 - **Index vektor** (`halfvec(3072)` + HNSW) begitu korpus RAG tumbuh melewati beberapa ribu chunk.
 - **Hybrid retrieval** (gabung skor leksikal + semantik) dan **reranking**.
 - **Chunking lebih cerdas** (sadar heading/section) & dedup lintas-dokumen.
-- **Streaming** jawaban Groq ke UI; **caching** embedding query.
+- **Streaming** jawaban LLM ke UI (gateway Makers mendukung SSE); **caching** embedding query.
 - **Test otomatis** + CI (lint, build Docker, smoke test).
