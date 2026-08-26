@@ -11,24 +11,24 @@
  * Router aplikasinya sendiri (lib/api.js) berbicara req/res gaya Node, jadi
  * berkas ini yang menjembatani Fetch <-> Node. Tiga sifat yang disengaja:
  *
- *   1. Modul dimuat LAZY di dalam handler. Kegagalan import jadi balasan 500
- *      yang bisa dibaca, bukan cold start yang mati diam-diam.
+ *   1. Modul dimuat lewat import() DINAMIS, bukan createRequire/require.
+ *      Platform mem-bundle tiap function jadi satu berkas /var/user/index.mjs:
+ *      import diselesaikan saat build lalu di-inline, sedangkan require()
+ *      diselesaikan saat runtime relatif terhadap berkas bundle itu — dan di
+ *      sana lib/ tidak ada. Persis inilah penyebab 504 sebelumnya.
  *   2. Ada watchdog. Apa pun yang menggantung dibalas 504 berisi keterangan
  *      sebelum platform memotongnya di 120 detik tanpa jejak.
  *   3. Tidak ada dependency framework. Body dibaca sekali lalu dialirkan ulang.
  */
-import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
-
-// lib/ tetap CommonJS; folder ini ESM (lihat cloud-functions/package.json).
-const require = createRequire(import.meta.url);
 
 // Batas aman di bawah maxDuration 120 detik, agar penyebabnya masih terlihat.
 const WATCHDOG_MS = Number(process.env.FUNCTION_WATCHDOG_MS || 100_000);
 
 let cachedRouter = null;
-function loadRouter() {
-  if (!cachedRouter) cachedRouter = require('../../lib/api.js');
+async function loadRouter() {
+  // lib/ CommonJS; import default dari ESM memberi module.exports-nya.
+  if (!cachedRouter) cachedRouter = (await import('../../lib/api.js')).default;
   return cachedRouter;
 }
 
@@ -97,7 +97,7 @@ export default async function onRequest(context) {
     const hasBody = !['GET', 'HEAD'].includes(request.method);
     const bodyBuffer = hasBody ? Buffer.from(await request.arrayBuffer()) : null;
 
-    const router = loadRouter();
+    const router = await loadRouter();
     const req = toNodeRequest(request, url, bodyBuffer);
 
     const handled = new Promise((resolve) => {
