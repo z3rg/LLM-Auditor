@@ -231,13 +231,19 @@ Perubahan variabel **baru berlaku setelah deploy ulang**.
 
 Opsional: `MAKERS_MODEL`, `SEED_PASSWORD`, `BLOB_STORE_NAME`, `BLOB_CACHE_TTL_MS`.
 
-### 6. Isi data awal
+### 6. Isi data awal — otomatis
 
-Store Blob project masih kosong setelah deploy pertama. Dari mesin Anda:
+**Tidak ada langkah manual.** Request pertama ke API akan mengisi store bila masih kosong
+(divisi, topik, 32 peserta, dan tiga akun staf dengan kata sandi `SEED_PASSWORD`).
 
-```bash
-EDGEONE_PROJECT_ID=makers-xxxx EDGEONE_BLOB_TOKEN=… npm run seed
-```
+Sengaja dibuat begitu: menyemai dari luar (`npm run seed`) menuntut API token project, padahal
+di dalam function kredensial Blob sudah otomatis. Menyemai dari dalam membuat deployment
+berdiri sendiri — tidak ada rahasia tambahan yang perlu dibuat hanya untuk mengisi data awal.
+Penyemaiannya idempoten dan mengklaim haknya lewat tulis bersyarat, jadi aman meski beberapa
+instance dingin memulai bersamaan.
+
+`npm run seed` dari mesin Anda tetap tersedia (butuh `EDGEONE_PROJECT_ID` +
+`EDGEONE_BLOB_TOKEN`), berguna untuk `--reseed` terhadap project produksi.
 
 ### 7. Verifikasi
 

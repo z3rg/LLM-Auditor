@@ -25,13 +25,44 @@
  */
 import { Readable } from 'node:stream';
 
-// Di-resolusi sebagai import relatif biasa oleh runtime agents.
+// Import STATIS, bukan createRequire: builder EdgeOne mem-bundle agent jadi
+// satu berkas, dan require dinamis tidak bisa diresolusi bundler — persis
+// kegagalan yang dulu menjatuhkan jalur cloud-functions.
 import apiRouter from '../lib/api.js';
+import db from '../lib/db.js';
+import auth from '../lib/auth.js';
 
 // SDK Blob TIDAK di-import di sini. lib/blob.js me-require-nya secara malas
 // saat operasi pertama, dan paketnya dijamin ada di runtime lewat
 // edgeone.json -> agents.externalNodeModules. Import di sini hanya akan
 // memindahkan kegagalan resolusi ke waktu muat modul, di mana pesannya hilang.
+
+/**
+ * Isi data awal sekali per instance, saat request pertama.
+ *
+ * Di dev lokal langkah ini dikerjakan server.js; di sini tidak ada proses yang
+ * "menyala" lebih dulu. Alternatifnya menjalankan `npm run seed` dari luar,
+ * tetapi itu menuntut API token project — padahal di dalam function kredensial
+ * Blob sudah otomatis. Menyemai dari dalam membuat deployment berdiri sendiri:
+ * tidak ada rahasia tambahan yang perlu dibuat hanya untuk mengisi data awal.
+ *
+ * db.seed() idempoten dan mengklaim haknya lewat tulis bersyarat, jadi aman
+ * meski beberapa instance dingin memulai bersamaan.
+ */
+let seedPromise = null;
+function ensureSeeded() {
+  if (!seedPromise) {
+    seedPromise = (async () => {
+      await db.seed();
+      await auth.bootstrap();
+    })().catch((error) => {
+      // Jangan menahan kegagalan selamanya: request berikutnya boleh mencoba lagi.
+      seedPromise = null;
+      throw error;
+    });
+  }
+  return seedPromise;
+}
 
 // Batas aman di bawah agents.timeout (300 detik), agar penyebabnya masih terlihat.
 const WATCHDOG_MS = Number(process.env.FUNCTION_WATCHDOG_MS || 280_000);
@@ -190,6 +221,16 @@ export async function handleApi(context) {
 
   try {
     adoptEnv(context);
+    // Data awal harus ada sebelum request pertama dilayani — termasuk
+    // /api/auth/divisions yang mengisi formulir pendaftaran sebelum login.
+    try {
+      await ensureSeeded();
+    } catch (e) {
+      return json(503, {
+        error: `Gagal menyiapkan data awal: ${String((e && e.message) || e)}`,
+        hint: 'Biasanya berarti Blob belum bisa diakses. Cek /api/ping.',
+      });
+    }
     const url = requestUrl(context);
     const bodyBuffer = await requestBody(context);
     const req = toNodeRequest(context, url, bodyBuffer);
