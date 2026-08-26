@@ -1,0 +1,4 @@
+{
+  "//": "Menandai berkas .js di folder ini sebagai ESM. EdgeOne mensyaratkan cloud function meng-export default instance framework (sintaks ESM), sedangkan lib/ tetap CommonJS — resolusi Node menghormati package.json terdekat, jadi keduanya hidup berdampingan tanpa mengubah seluruh repo.",
+  "type": "module"
+}

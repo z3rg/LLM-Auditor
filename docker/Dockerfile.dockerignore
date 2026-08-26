@@ -2,22 +2,19 @@
 # "<dockerfile>.dockerignore" (docker/Dockerfile.dockerignore). Pola di bawah
 # relatif terhadap KONTEKS build (root repo), bukan folder docker/.
 
-# Cache & dependency (app zero-dependency; tidak ada yang perlu disalin)
+# Cache & dependency — node_modules dipasang di dalam image (npm ci)
 node_modules/
 .npm-cache/
 .cache/
 .venv/
 
-# Data runtime lokal & rahasia — JANGAN dibungkus ke image
+# Snapshot SQLite lama (hanya sumber migrasi) & rahasia — JANGAN masuk image
 data/
 *.db
 *.db-wal
 *.db-shm
 *.db-journal
 .env
-
-# Biner vendor lokal (macOS .dylib) — image mengunduh vec0.so untuk Linux
-lib/vendor/
 
 # Git & misc
 .git/

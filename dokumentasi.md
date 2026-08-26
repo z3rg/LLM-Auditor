@@ -50,7 +50,7 @@ realistis per divisi. Snapshot aktual basis data:
 
 Tiga dokumen **POJK (Peraturan OJK)** tentang Teknologi Informasi & sistem elektronik perbankan,
 diimpor lalu di-_embed_ dengan **Gemini `gemini-embedding-001` (3072 dimensi)** dan disimpan ke
-**SQLite + `sqlite-vec`**:
+**Postgres + `pgvector`**:
 
 | Dokumen | Halaman | Chunk tersimpan |
 |---------|---------|-----------------|
@@ -71,24 +71,26 @@ diimpor lalu di-_embed_ dengan **Gemini `gemini-embedding-001` (3072 dimensi)** 
 ### 2.1 Arsitektur sistem
 
 ```
-Browser (public/) ──/api/*──> server.js (node:http)
+Browser (public/) ──/api/*──> lib/api.js
+   (static hosting)             (server.js lokal / Cloud Function EdgeOne)
                                   ├──> lib/auth.js ──> sesi (cookie HttpOnly) + peran
-                                  ├──> lib/db.js   ──> SQLite (node:sqlite) + VIEW analitik
+                                  ├──> lib/db.js   ──> Postgres (Neon) + VIEW analitik
                                   ├──> lib/groq.js ──fetch──> Groq API   (LLM: llama-3.3-70b)
-                                  └──> lib/vec.js  ──> sqlite-vec (KNN)
+                                  └──> lib/vec.js  ──> pgvector (cosine <=>)
                                             └──> lib/embedder.js ──fetch──> Gemini API (embedding)
 ```
 
 | Berkas | Peran |
 |--------|-------|
-| `server.js` | HTTP server + routing API + static files + warmup RAG + gerbang sesi/peran |
+| `lib/api.js` | Router API + gerbang sesi/peran; dipakai server dev lokal maupun Cloud Function |
+| `cloud-functions/api/[[default]].js` | Entri produksi EdgeOne Makers (Express) |
 | `lib/auth.js` | Autentikasi: hash scrypt, sesi + cookie HttpOnly, throttle login, bootstrap akun staf |
-| `lib/db.js` | Skema SQLite, seed deterministik, VIEW analitik gap, akun & `sessions` |
+| `lib/db.js` | Akses data Postgres (async), seed deterministik, VIEW analitik gap, akun & `sessions` |
 | `lib/groq.js` | Wrapper Groq + fitur AI + **agen ReAct penyusun kuis** |
-| `lib/vec.js` | RAG store: chunking (parser hukum), index `sqlite-vec`, fallback cosine JS |
+| `lib/vec.js` | RAG store: chunking (parser hukum), pencarian `pgvector` (cosine) |
 | `lib/embedder.js` | Embedder **Gemini-only** (3072-dim) via `fetch` |
-| `lib/pdf.js` | Ekstraktor teks PDF zero-dependency (FlateDecode) |
-| `data/auditor.db` | Basis data SQLite (kuis + basis pengetahuan RAG) |
+| `lib/pdf.js` | Ekstraktor teks PDF tanpa dependency (FlateDecode) |
+| Postgres (Neon) | Basis data (kuis + basis pengetahuan RAG); `data/auditor.db` kini hanya sumber migrasi |
 
 ### 2.2 Autentikasi dan kontrol akses
 
@@ -123,7 +125,7 @@ Poin desain yang relevan untuk audit:
 
 **ReAct = Reasoning + Acting.** Alih-alih meminta LLM langsung "buat 10 soal", agen ini
 **menalar** materi apa yang dibutuhkan, lalu **bertindak** memanggil _tool_ `search_knowledge`
-(pencarian `sqlite-vec`) untuk menarik materi nyata dari PDF regulasi, baru menyusun soal yang
+(pencarian `pgvector`) untuk menarik materi nyata dari PDF regulasi, baru menyusun soal yang
 _grounded_ pada materi tersebut. Setiap langkah penalaran (Thought / Action / Observation)
 direkam ke **trace** dan ditampilkan di UI agar transparan.
 
@@ -140,7 +142,7 @@ sehingga RAG memengaruhi **tiap** soal — bukan satu pencarian untuk seluruh ku
                  │       └─► n sub-konsep berbeda + 1 query pencarian per sub-konsep                    │
                  │                                                                                      │
                  │  2. ACT — retrieval PER SOAL (loop n kali)                                           │
-                 │     untuk tiap sub-konsep:  vec.search(query) ──► sqlite-vec (KNN, cosine)           │
+                 │     untuk tiap sub-konsep:  vec.search(query) ──► pgvector (cosine <=>)             │
                  │       └─► grounded = (similarity_top ≥ GROUND_MIN 0.63) ? true : false (blend+tandai)│
                  │                                                                                      │
                  │  3. GENERATE (grounded, terfokus)                                                    │
@@ -157,7 +159,7 @@ sehingga RAG memengaruhi **tiap** soal — bukan satu pencarian untuk seluruh ku
 
 Inti desain — **pemisahan tanggung jawab** agar output andal:
 1. **Reasoning/Planning** (apa yang harus dicari) dipisah dari
-2. **Retrieval** (mengambil materi dari `sqlite-vec`) dan
+2. **Retrieval** (mengambil materi dari `pgvector`) dan
 3. **Generation final** (menyusun JSON soal) — menghindari JSON soal terpotong di tengah loop.
 
 **Blend + tandai:** bila sebuah sub-konsep tidak menemukan materi di atas ambang
@@ -189,28 +191,25 @@ async function tryGemini(apiKey) {
 }
 ```
 
-#### (b) Pencarian RAG (KNN) — `lib/vec.js`
+#### (b) Pencarian RAG — `lib/vec.js`
 
-Vektor di-L2-normalize sehingga **jarak L2 vec0 setara peringkat cosine** (`cos = 1 − d²/2`):
+Vektor di-L2-normalize sehingga **similarity = 1 − jarak cosine** pgvector:
 
 ```js
 async function search(query, k = 5) {
   const be = await ready();
-  const qv = await be.embed(query, 'query');
-  if (vecEnabled) {
-    const rows = db.prepare(`
-      WITH knn AS (
-        SELECT rowid AS id, distance FROM vec_pdf_chunks
-        WHERE embedding MATCH ? ORDER BY distance LIMIT ?
-      )
-      SELECT c.id, c.content, d.title AS source, knn.distance
-      FROM knn JOIN pdf_chunks c ON c.id = knn.id JOIN pdf_documents d ON d.id = c.doc_id
-      ORDER BY knn.distance
-    `).all(toBlob(qv), k);
-    return rows.map((r) => ({ id: r.id, content: r.content, source: r.source,
-                              similarity: round2(cosFromL2(r.distance)) }));
-  }
-  // ... fallback cosine murni-JS bila sqlite-vec tak termuat ...
+  const qv = toVector(await be.embed(query, 'query'));
+  const rows = await pg.many(`
+    SELECT c.id, c.content, d.title AS source,
+           (c.embedding <=> $1::vector) AS distance
+    FROM pdf_chunks c
+    JOIN pdf_documents d ON d.id = c.doc_id
+    WHERE c.embedding IS NOT NULL
+    ORDER BY c.embedding <=> $1::vector
+    LIMIT $2
+  `, [qv, k]);
+  return rows.map((r) => ({ id: r.id, content: r.content, source: r.source,
+                            similarity: round2(1 - Number(r.distance)) }));
 }
 ```
 
@@ -343,8 +342,9 @@ global; gap baru terlihat pada granularitas **divisi×topik** dan **karyawan×to
    (1 soal/blok) menghindari JSON terpotong dan menjaga pemetaan soal↔sumber via field `block`.
 4. **Transparansi ReAct.** Trace Thought/Action/Observation + kutipan sumber per-soal membuat
    keluaran LLM **dapat diaudit** — selaras dengan konteks proyek (IT Audit).
-5. **Arsitektur ramping.** Inti zero-dependency + `sqlite-vec` + Gemini via `fetch`: tanpa
-   framework, ORM, atau model lokal — mudah dideploy (lihat folder `docker/`).
+5. **Arsitektur ramping.** Dua dependency runtime + `pgvector` + Gemini via `fetch`: tanpa ORM,
+   bundler, atau model lokal — berjalan serverless di EdgeOne Makers, dan tetap bisa dikemas
+   sebagai kontainer (lihat folder `docker/`).
 6. **Robustness ingesti vs rate limit.** Bukti nyata: `pojk 4-2021` hanya tersimpan **65 dari 272**
    chunk karena batas **Gemini free-tier (~100 embed/menit)**. `addDocument()` menyisipkan chunk
    satu-per-satu tanpa transaksi atomik, sehingga error di tengah meninggalkan dokumen separuh

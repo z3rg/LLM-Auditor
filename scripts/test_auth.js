@@ -3,20 +3,38 @@
  * Uji regresi alur autentikasi: sesi, kontrol peran, pendaftaran, administrasi
  * akun, throttle login, dan perilaku atribut cookie `Secure`.
  *
- *   npm run test:auth
+ *   TEST_DATABASE_URL=postgresql://… npm run test:auth
  *
- * Menjalankan server sungguhan di port 3116-3118 memakai salinan database.
+ * Menjalankan server sungguhan di port 3116-3118 di atas DATABASE TERPISAH.
  * Tidak memanggil Groq/Gemini, jadi tidak butuh API key.
+ *
+ * PENTING: pengujian ini MENGOSONGKAN seluruh tabel di database yang dipakai,
+ * jadi ia menolak berjalan tanpa TEST_DATABASE_URL yang eksplisit — pakai
+ * branch Neon khusus uji, bukan database yang berisi data sungguhan.
  */
 const { spawn } = require('node:child_process');
-const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 
-// Berjalan di atas SALINAN database (lewat DB_PATH), sehingga data/auditor.db
-// yang dilacak git tidak pernah tersentuh oleh pengujian.
 const ROOT = path.join(__dirname, '..');
-const TEST_DB = path.join(os.tmpdir(), `llm-auditor-uji-${process.pid}.db`);
+require('../lib/env').loadEnv();
+
+const TEST_URL = process.env.TEST_DATABASE_URL;
+if (!TEST_URL) {
+  console.error(`
+  TEST_DATABASE_URL belum disetel.
+
+  Pengujian ini mengosongkan seluruh tabel, jadi ia tidak akan pernah memakai
+  DATABASE_URL biasa. Buat branch uji di Neon (Branches → New branch), lalu:
+
+      TEST_DATABASE_URL='postgresql://…' npm run test:auth
+`);
+  process.exit(2);
+}
+// Semua modul di bawah ini harus melihat database uji, bukan yang biasa.
+process.env.DATABASE_URL = TEST_URL;
+
+const db = require('../lib/db');
+const pg = require('../lib/pg');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -28,7 +46,7 @@ function check(name, ok, detail = '') {
 function startServer(port, env = {}) {
   const child = spawn('node', ['server.js'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), DB_PATH: TEST_DB, ...env },
+    env: { ...process.env, PORT: String(port), DATABASE_URL: TEST_URL, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
@@ -61,8 +79,11 @@ async function req(base, method, p, { body, cookie, headers = {} } = {}) {
 const sidOf = (setCookie) => (setCookie.match(/sid=([^;]+)/) || [])[1];
 
 (async () => {
-  // DB uji = salinan, agar data/auditor.db yang dilacak git tidak berubah.
-  fs.copyFileSync(path.join(ROOT, 'data', 'auditor.db'), TEST_DB);
+  // Database uji disiapkan dari nol: skema + data dummy deterministik. Akun staf
+  // belum punya kata sandi, jadi bootstrap server memberi 'Auditor#2026'.
+  await db.applySchema();
+  await db.reseed();
+  await pg.exec('TRUNCATE pdf_chunks, pdf_documents RESTART IDENTITY CASCADE');
 
   // ---------------------------------------------------------------- HTTP biasa
   const B = 'http://localhost:3116';
@@ -97,7 +118,11 @@ const sidOf = (setCookie) => (setCookie.match(/sid=([^;]+)/) || [])[1];
     r = await req(B, 'GET', '/api/auth/me', { cookie: admin });
     check('/api/auth/me mengenali akun', r.status === 200 && r.data.user.email === 'admin@company.co.id');
     r = await req(B, 'GET', '/api/overview', { cookie: admin });
-    check('super admin membaca analitik', r.status === 200 && r.data.totals.attempts === 391, `attempts ${r.data?.totals?.attempts}`);
+    // 390 = jumlah yang dihasilkan seed deterministik. Uji versi SQLite dulu
+    // memakai 391 karena berjalan di atas salinan data/auditor.db, yang memuat
+    // satu attempt tambahan hasil pemakaian demo (2026-06-11 — di luar rentang
+    // tanggal seed yang berhenti di 2026-06-01). Uji ini menyemai dari nol.
+    check('super admin membaca analitik', r.status === 200 && r.data.totals.attempts === 390, `attempts ${r.data?.totals?.attempts}`);
 
     // --- pendaftaran
     const email = `uji.${Date.now()}@company.co.id`;
@@ -119,14 +144,15 @@ const sidOf = (setCookie) => (setCookie.match(/sid=([^;]+)/) || [])[1];
     check('staf boleh menengok kurikulum peserta lain', r.status === 200 && r.data.employee.id === pesertaId);
 
     // --- kepemilikan sesi kuis (sisip langsung ke DB, tanpa memanggil Groq)
-    const { DatabaseSync } = require('node:sqlite');
-    const db = new DatabaseSync(TEST_DB);
     const payload = JSON.stringify([{ question: 'q', options: ['a', 'b'], answer_index: 0, explanation: '' }]);
-    const orang_lain = db.prepare("SELECT id FROM employees WHERE role='employee' AND id <> ? LIMIT 1").get(pesertaId).id;
-    const sesiOrangLain = Number(db.prepare(
-      "INSERT INTO quiz_sessions (employee_id, topic_id, payload, num_questions, model, created_at) VALUES (?, 1, ?, 1, 'uji', datetime('now'))"
-    ).run(orang_lain, payload).lastInsertRowid);
-    db.close();
+    const orangLain = await pg.one(
+      "SELECT id FROM employees WHERE role='employee' AND id <> $1 LIMIT 1", [pesertaId]
+    );
+    const sesiOrangLain = (await pg.one(
+      `INSERT INTO quiz_sessions (employee_id, topic_id, payload, num_questions, model, created_at)
+       VALUES ($1, 1, $2, 1, 'uji', $3) RETURNING id`,
+      [orangLain.id, payload, new Date().toISOString()]
+    )).id;
     r = await req(B, 'POST', '/api/quiz/submit', { cookie: peserta, body: { session_id: sesiOrangLain, answers: [0] } });
     check('tidak bisa mengumpulkan sesi kuis milik orang lain (403)', r.status === 403, `status ${r.status}`);
 
@@ -150,10 +176,12 @@ const sidOf = (setCookie) => (setCookie.match(/sid=([^;]+)/) || [])[1];
     check('login memakai sandi baru', (await req(B, 'POST', '/api/auth/login', { body: { email: 'admin@company.co.id', password: 'SandiBaru2026' } })).status === 200);
     check('sandi lama tidak berlaku lagi', (await req(B, 'POST', '/api/auth/login', { body: { email: 'admin@company.co.id', password: 'Auditor#2026' } })).status === 401);
 
-    // --- throttle
+    // --- throttle (kini beralas tabel login_attempts, bukan Map in-memory)
     const emailThrottle = `throttle.${Date.now()}@company.co.id`;
     for (let i = 0; i < 8; i++) await req(B, 'POST', '/api/auth/login', { body: { email: emailThrottle, password: 'salah' } });
     check('login dibatasi setelah 8 percobaan gagal (429)', (await req(B, 'POST', '/api/auth/login', { body: { email: emailThrottle, password: 'salah' } })).status === 429);
+    check('hitungan throttle tersimpan di database (bertahan lintas proses)',
+      (await pg.scalar('SELECT count FROM login_attempts WHERE email = $1', [emailThrottle])) >= 8);
 
     // --- pra-login & statis
     check('daftar divisi bisa diambil sebelum login', (await req(B, 'GET', '/api/auth/divisions')).status === 200);
@@ -188,7 +216,5 @@ const sidOf = (setCookie) => (setCookie.match(/sid=([^;]+)/) || [])[1];
 
   console.log(results.join('\n'));
   console.log(`\n  ${pass} lulus, ${fail} gagal`);
-  fs.rmSync(TEST_DB, { force: true });
-  ['-wal', '-shm'].forEach((s) => fs.rmSync(TEST_DB + s, { force: true }));
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('GAGAL MENJALANKAN:', e.message); process.exit(2); });

@@ -11,7 +11,7 @@ dan setiap soal yang *grounded* mencantumkan dokumen asalnya di UI.
 | `pojk 13-2020.pdf` | 13 | 34 |
 
 Total **452 chunk**, di-*embed* dengan Gemini `gemini-embedding-001` (3072 dimensi) dan
-disimpan di tabel `pdf_chunks` + virtual table `vec_pdf_chunks` (sqlite-vec).
+disimpan di tabel `pdf_chunks` (kolom `embedding vector(3072)`, pgvector).
 
 > `pojk 4-2021.pdf` ter-ingest sebagian (272 dari ~perkiraan penuh) karena batas laju
 > Gemini free tier saat proses impor. Lihat catatan di `dokumentasi.md` §4.2.

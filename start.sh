@@ -41,17 +41,17 @@ printf "\n${c_blue}╭───────────────────�
 printf   "${c_blue}│${c_reset}   LLM Auditor — IT Audit Quiz Analytics        ${c_blue}│${c_reset}\n"
 printf   "${c_blue}╰───────────────────────────────────────────────╯${c_reset}\n\n"
 
-# --- 1. Node.js tersedia & versi cukup (butuh node:sqlite >= 22.5) -----------
+# --- 1. Node.js tersedia & versi cukup ---------------------------------------
 if ! command -v node >/dev/null 2>&1; then
-  err "Node.js tidak ditemukan. Install Node.js >= 22.5 dari https://nodejs.org"
+  err "Node.js tidak ditemukan. Install Node.js >= 20 dari https://nodejs.org"
   exit 1
 fi
 NODE_VER="$(node -v | sed 's/^v//')"
 NODE_MAJOR="${NODE_VER%%.*}"
 NODE_REST="${NODE_VER#*.}"
 NODE_MINOR="${NODE_REST%%.*}"
-if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 5 ]; }; then
-  err "Node.js $NODE_VER terlalu lama. Butuh >= 22.5 (untuk modul node:sqlite)."
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  err "Node.js $NODE_VER terlalu lama. Butuh >= 20 (versi runtime EdgeOne Cloud Functions)."
   exit 1
 fi
 ok "Node.js $NODE_VER"
@@ -80,10 +80,25 @@ else
   ok "GROQ_API_KEY terpasang"
 fi
 
-# --- 3. Reseed opsional -----------------------------------------------------
+DB_URL="$(read_env DATABASE_URL)"
+if [ -z "$DB_URL" ] || case "$DB_URL" in *user:password@*) true ;; *) false ;; esac; then
+  err "DATABASE_URL belum diisi di .env."
+  err "Buat database Postgres gratis di https://neon.tech, tempel connection string-nya,"
+  err "lalu jalankan: npm run db:setup"
+  exit 1
+fi
+ok "DATABASE_URL terpasang"
+
+# --- 3. Dependency & penyiapan database -------------------------------------
+if [ ! -d node_modules ]; then
+  info "Memasang dependency (express + driver Neon)…"
+  npm install --no-audit --no-fund || { err "npm install gagal."; exit 1; }
+fi
+ok "Dependency siap"
+
 if [ "$DO_RESEED" -eq 1 ]; then
   info "Mereset & mengisi ulang data dummy…"
-  node -e "require('./lib/db').reseed(); console.log('  database reseeded.')"
+  node scripts/db_setup.js --reseed || { err "Reseed gagal."; exit 1; }
   ok "Data dummy diisi ulang"
 fi
 

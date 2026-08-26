@@ -4,10 +4,10 @@ Aplikasi analitik hasil kuis **IT Auditor** lintas divisi, ditenagai **Groq** (o
 Mengubah data kuis menjadi **rekomendasi AI untuk gap pengetahuan**, **saran topik kuis**, **SQL Agent**
 bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → Direktur**.
 
-> **Zero-dependency**: hanya butuh Node.js (≥ 22.5). Tidak ada `npm install` — seluruh aplikasi
-> berjalan di atas modul bawaan Node (`node:http`, `node:sqlite`, `node:zlib`, `fetch`).
-> Untuk RAG, ekstensi **`sqlite-vec`** sudah disertakan (`lib/vendor/vec0.dylib`, macOS arm64);
-> bila tidak tersedia di platform Anda, app otomatis memakai fallback cosine murni-JS.
+> **Serverless-first**: berjalan di **EdgeOne Makers** — frontend statis + API sebagai Cloud
+> Function — dengan seluruh state di **Postgres (Neon) + pgvector**. Dependency runtime-nya dua:
+> `express` dan driver HTTP `@neondatabase/serverless`; sisanya modul bawaan Node
+> (`node:http`, `node:crypto`, `node:zlib`, `fetch`).
 > **Embedding RAG memakai Google Gemini** (`gemini-embedding-001`, 3072-dim) lewat `fetch` —
 > butuh **`GEMINI_API_KEY`**. Tidak ada model lokal atau fallback leksikal: tanpa key, fitur
 > RAG (impor PDF & retrieval) tidak aktif.
@@ -19,13 +19,14 @@ bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → 
 2. [Kebutuhan Sistem](#kebutuhan-sistem)
 3. [Setup](#setup)
 4. [Menjalankan Aplikasi](#menjalankan-aplikasi)
-5. [Deploy dengan Docker (Portable)](#deploy-dengan-docker-portable)
-6. [Cara Pakai (per Peran)](#cara-pakai-per-peran)
-7. [Data Dummy](#data-dummy)
-8. [Referensi API](#referensi-api)
-9. [Arsitektur](#arsitektur)
-10. [Keamanan](#keamanan)
-11. [Troubleshooting](#troubleshooting)
+5. [Deploy ke EdgeOne Makers](#deploy-ke-edgeone-makers)
+6. [Deploy dengan Docker (Portable)](#deploy-dengan-docker-portable)
+7. [Cara Pakai (per Peran)](#cara-pakai-per-peran)
+8. [Data Dummy](#data-dummy)
+9. [Referensi API](#referensi-api)
+10. [Arsitektur](#arsitektur)
+11. [Keamanan](#keamanan)
+12. [Troubleshooting](#troubleshooting)
 
 > Panduan pengembangan lanjutan: lihat **[DEVELOPER.md](DEVELOPER.md)**.
 
@@ -42,25 +43,28 @@ bahasa-natural, **tren skor per waktu**, dan alur persetujuan **Super Admin → 
 | 5 | **Tren Skor per Waktu** | Grafik garis (SVG) rata-rata skor per bulan — mode **Keseluruhan / Per Divisi / Per Topik**, **filter rentang waktu (3/6/12 bulan / Semua)**, dan garis ambang gap. |
 | 6 | **Dashboard Overview** | Statistik ringkas + skor rata-rata per divisi & per topik. |
 | 7 | **Kuis Perbaikan (Peserta Audit)** | Peserta login → melihat **gap pengetahuan dirinya** (topik di bawah rata-rata, dideteksi via SQL view) → Groq men-*generate* **10 soal pilihan ganda** per topik (sesuai topik & area) → dijawab & dinilai (**maks 100**) → **skor di-insert ke `quiz_attempts`** sehingga rata-rata/gap membaik otomatis. |
-| 8 | **PDF Importer → RAG (sqlite-vec)** | Di tab **Pengaturan** (Super Admin), unggah PDF → teks diekstrak, dipotong dengan **parser hierarki hukum** (BAB/Pasal/Seksi/Poin, default), di-*embed* oleh **Gemini `gemini-embedding-001`** (3072-dim), lalu disimpan ke **SQLite + `sqlite-vec`** sebagai basis pengetahuan. Butuh `GEMINI_API_KEY`. |
-| 9 | **Kuis berbasis ReAct + RAG (per soal)** | Saat membuat kuis, agen **ReAct** (Reason + Act) **merencanakan sub-konsep**, lalu memanggil `search_knowledge` **terpisah untuk SETIAP soal** menarik materi paling relevan dari PDF (RAG via sqlite-vec), baru menyusun tiap soal yang *grounded* pada materinya. Setiap soal menampilkan **sumber PDF-nya**; bila materi tipis, soal disusun dari pengetahuan umum dan **ditandai** (blend). Jejak penalaran (Thought/Action/Observation) + rasio `grounded` ditampilkan di UI. |
+| 8 | **PDF Importer → RAG (pgvector)** | Di tab **Pengaturan** (Super Admin), unggah PDF → teks diekstrak, dipotong dengan **parser hierarki hukum** (BAB/Pasal/Seksi/Poin, default), di-*embed* oleh **Gemini `gemini-embedding-001`** (3072-dim), lalu disimpan ke **Postgres + `pgvector`** sebagai basis pengetahuan. Butuh `GEMINI_API_KEY`. |
+| 9 | **Kuis berbasis ReAct + RAG (per soal)** | Saat membuat kuis, agen **ReAct** (Reason + Act) **merencanakan sub-konsep**, lalu memanggil `search_knowledge` **terpisah untuk SETIAP soal** menarik materi paling relevan dari PDF (RAG via pgvector), baru menyusun tiap soal yang *grounded* pada materinya. Setiap soal menampilkan **sumber PDF-nya**; bila materi tipis, soal disusun dari pengetahuan umum dan **ditandai** (blend). Jejak penalaran (Thought/Action/Observation) + rasio `grounded` ditampilkan di UI. |
 
 ---
 
 ## Kebutuhan Sistem
 
-Pilih salah satu:
+Wajib:
 
-- **Native** — **Node.js ≥ 22.5** untuk `node:sqlite`; untuk RAG dengan ekstensi `sqlite-vec`
-  butuh **Node ≥ 23.5** (dukungan `loadExtension`). Cek versi: `node --version`.
-- **Docker** — cukup Docker (dependency Node + ekstensi `sqlite-vec` dibungkus). RAG memanggil
-  Gemini API saat runtime, jadi kontainer **butuh `GEMINI_API_KEY`** (bukan image offline). Lihat
-  [Deploy dengan Docker](#deploy-dengan-docker-portable).
-
-Lainnya:
+- **Node.js ≥ 20** (versi yang dipakai runtime EdgeOne Cloud Functions). Cek: `node --version`.
+- **Database Postgres + pgvector di [Neon](https://neon.tech)** — tier gratis cukup. Driver yang
+  dipakai berbicara lewat endpoint HTTP Neon, jadi `DATABASE_URL` harus URL Neon; Postgres di
+  localhost tidak akan terhubung.
 - Koneksi internet untuk memanggil **Groq API** (fitur AI) dan **Gemini API** (embedding RAG).
 - **API key Groq** — gratis di <https://console.groq.com/keys>.
 - **API key Gemini** (untuk RAG/PDF importer) — gratis di <https://aistudio.google.com/apikey>.
+
+Opsional:
+- **Docker**, bila ingin menjalankannya sebagai kontainer di VM alih-alih di EdgeOne. Lihat
+  [Deploy dengan Docker](#deploy-dengan-docker-portable).
+- **Node ≥ 22.5** bila ingin menjalankan `npm run db:migrate` — skrip migrasi itu membaca
+  snapshot SQLite lama lewat `node:sqlite`. Aplikasinya sendiri tidak.
 
 ---
 
@@ -86,8 +90,19 @@ GEMINI_API_KEY=AIza_xxxxxxxxxxxxxxxxxxxxxxxx # key dari aistudio.google.com/apik
 GEMINI_EMBED_MODEL=gemini-embedding-001     # default; 3072-dim
 ```
 
-> Database `data/auditor.db` dibuat & diisi data dummy **otomatis** saat server pertama kali
-> dijalankan (folder `data/` dibuat otomatis; override lokasi via `DB_PATH`).
+Lalu pasang dependency dan siapkan database sekali saja:
+
+```bash
+npm install        # express + driver Neon
+npm run db:setup   # terapkan db/schema.sql, isi data dummy, siapkan akun staf
+```
+
+> **Kenapa ini langkah terpisah?** Di versi SQLite, skema & data dibuat otomatis saat modul
+> database dimuat. Itu tidak cocok untuk serverless — setiap cold start akan menjalankan DDL —
+> jadi penyiapan sekarang eksplisit dan hanya sekali.
+>
+> Sudah punya data demo di `data/auditor.db`? Pindahkan seluruh isinya (termasuk 452 chunk RAG,
+> tanpa memanggil Gemini) dengan `npm run db:migrate`.
 >
 > **Embedding RAG (untuk fitur PDF Importer)** memakai **Gemini `gemini-embedding-001`** — tidak
 > ada model lokal yang perlu diunduh atau dikonversi. Cukup isi `GEMINI_API_KEY` di `.env`
@@ -126,8 +141,9 @@ Output:
   LLM Auditor running:  http://localhost:3000
   Groq model:           llama-3.3-70b-versatile
   Groq key loaded:      yes
+  Database:             Postgres (Neon)
   RAG embedder:         gemini:gemini-embedding-001 (dim 3072)
-  RAG vector store:     sqlite-vec (vec0)
+  RAG vector store:     pgvector (cosine) — 452 chunk
 ```
 
 > Bila `GEMINI_API_KEY` belum disetel, server tetap menyala (ada peringatan `RAG init warning`)
@@ -161,26 +177,26 @@ npm run test:auth
 npm run seed
 ```
 
-> **Tentang `data/auditor.db` yang ikut di repo.** Snapshot demo ini sengaja dilacak agar repo
-> bisa langsung dijalankan lengkap dengan 391 hasil kuis dan indeks RAG 452 chunk dari tiga
-> dokumen POJK. Isinya data dummy; akun staf di dalamnya memakai kata sandi awal yang memang
-> sudah tertulis di README ini, jadi **anggap ketiga akun itu publik** dan ganti kata sandinya
-> pada instalasi yang Anda pakai sungguhan.
+> **Tentang `data/auditor.db` yang ikut di repo.** Sejak port ke Postgres, berkas ini bukan lagi
+> database yang dipakai aplikasi — ia hanya **sumber migrasi**: snapshot demo berisi 391 hasil
+> kuis dan indeks RAG 452 chunk dari tiga dokumen POJK, yang dipindahkan sekali dengan
+> `npm run db:migrate`. Aplikasi tidak pernah membukanya lagi, sehingga jebakan lama (menjalankan
+> app diam-diam mengotori snapshot yang dilacak git) hilang dengan sendirinya.
 >
-> Konsekuensinya: **jangan commit ulang database ini setelah Anda menyetel kata sandi asli** —
-> hash-nya akan ikut terpublikasi dan permanen di histori git. Untuk pemakaian nyata, biarkan
-> `data/` dibuat ulang secara lokal (`npm run seed`) atau arahkan `DB_PATH` ke luar repo.
+> Akun staf di dalamnya memakai kata sandi awal yang tertulis di README ini, jadi **anggap ketiga
+> akun itu publik** dan ganti kata sandinya pada instalasi yang Anda pakai sungguhan.
 
 ### Ingest massal PDF hukum (CLI)
 
 Untuk memuat **PDF hukum berukuran besar** ke basis pengetahuan RAG tanpa lewat UI, tersedia
 skrip Python `scripts/ingest_legal_pdf.py` (memakai **pypdf** untuk ekstraksi teks dan **Gemini**
 untuk embedding — model & dimensi sama persis dengan app Node, menulis ke tabel
-`pdf_documents`/`pdf_chunks`/`vec_pdf_chunks` yang sama):
+`pdf_documents`/`pdf_chunks` yang sama):
 
 ```bash
-pip install pypdf google-genai sqlite-vec          # sekali
+pip install pypdf google-genai "psycopg[binary]"   # sekali
 export GEMINI_API_KEY=AIza_xxxxxxxx
+export DATABASE_URL='postgresql://…'               # database yang sama dengan app
 
 npm run ingest-legal -- /path/to/regulasi.pdf       # via npm (perhatikan `--`)
 # atau langsung:
@@ -189,22 +205,82 @@ python3 scripts/ingest_legal_pdf.py /path/to/regulasi.pdf
 
 Skrip mem-parse hierarki **BAB → Seksi (A./B.) → Poin (1./2.) → Sub-poin (a./b.)**, menambahkan
 *breadcrumb* sebagai konteks tiap chunk, lalu meng-embed dengan `gemini-embedding-001`.
+Skemanya dimiliki `db/schema.sql`, jadi jalankan `npm run db:setup` lebih dulu.
 Server Node membaca hasilnya langsung (skrip men-set `embed_meta` ke `gemini:…` sehingga tidak
 ada re-embed saat server restart).
 
-> **Rate limit Gemini (free tier): ~100 embed/menit.** Skrip sudah memberi jeda antar-panggilan
-> dan commit tiap 20 chunk. Untuk dokumen sangat besar, pertimbangkan tier berbayar agar tidak
+> **Rate limit Gemini (free tier): ~100 embed/menit.** Skrip sudah memberi jeda antar-panggilan. Untuk dokumen sangat besar, pertimbangkan tier berbayar agar tidak
 > kena `429`.
+
+---
+
+## Deploy ke EdgeOne Makers
+
+Target deploy utama. Frontend disajikan static hosting, `/api/*` berjalan sebagai Cloud Function,
+dan seluruh state ada di Neon — instance-nya sendiri tidak menyimpan apa pun.
+
+### 1. Siapkan database
+
+```bash
+DATABASE_URL='postgresql://…neon.tech/neondb?sslmode=require' npm run db:setup
+# opsional, bawa data demo + 452 chunk RAG:
+DATABASE_URL='…' npm run db:migrate
+```
+
+### 2. Hubungkan repo
+
+Buka <https://console.tencentcloud.com/edgeone/makers> → **New project** → pilih repositori ini →
+branch yang ingin dideploy. Konfigurasi build sudah ada di `edgeone.json`, jadi biarkan
+terdeteksi otomatis:
+
+| Field | Nilai |
+|-------|-------|
+| Node version | `22.11.0` |
+| Install command | `npm install` |
+| Output directory | `public` |
+| Cloud function timeout | `120` detik (`cloudFunctions.nodejs.maxDuration`) |
+
+### 3. Isi environment variable
+
+Di **Project settings → Environment variables**:
+
+| Variabel | Keterangan |
+|----------|------------|
+| `DATABASE_URL` | Connection string Neon — wajib |
+| `GROQ_API_KEY` | Fitur AI Groq |
+| `GROQ_MODEL` | Opsional, default `llama-3.3-70b-versatile` |
+| `GEMINI_API_KEY` | Embedding RAG / impor PDF |
+| `GEMINI_EMBED_MODEL` | Opsional, default `gemini-embedding-001` |
+| `SEED_PASSWORD` | Hanya dibaca saat `npm run db:setup`, bukan saat runtime |
+
+### 4. Deploy & verifikasi
+
+```bash
+curl -s https://<project>.edgeone.app/api/config
+```
+
+Balasan yang sehat memuat `"hasKey": true` dan objek `rag`. Login lewat browser; karena EdgeOne
+mengakhiri TLS dan meneruskan `X-Forwarded-Proto: https`, cookie sesi otomatis ber-`Secure`
+tanpa perubahan konfigurasi.
+
+### Batas platform yang perlu diingat
+
+| Batas | Nilai | Dampak |
+|-------|-------|--------|
+| Durasi function | maks **120 detik** | Generate kuis ReAct memanggil Groq 2x + 12 embedding Gemini; jalur normal ±25-60 detik |
+| Body request | **6 MB** | Batas unggah PDF disamakan di `lib/api.js`; seluruh PDF POJK di repo < 600 KB |
+| Runtime | Node.js | Tidak ada filesystem persisten — karena itu state pindah ke Postgres |
 
 ---
 
 ## Deploy dengan Docker (Portable)
 
-Image Docker membungkus seluruh **dependency Node** dan ekstensi **`sqlite-vec`** (`vec0.so`,
-diunduh untuk arsitektur Linux target). Embedding RAG memakai **Gemini API**, jadi image **bukan
-offline**: kontainer melakukan panggilan jaringan saat runtime dan perlu dua key —
-**`GROQ_API_KEY`** (fitur AI Groq) dan **`GEMINI_API_KEY`** (embedding RAG / impor PDF). Tidak ada
-model lokal yang ikut di-build.
+Alternatif dari EdgeOne, untuk menjalankan app di VM biasa. Kontainernya **stateless**: seluruh
+data ada di Postgres, jadi tidak ada volume dan tidak ada berkas database di dalam image.
+Kontainer melakukan panggilan jaringan saat runtime dan perlu tiga nilai — **`DATABASE_URL`**
+(Neon), **`GROQ_API_KEY`** (fitur AI Groq), dan **`GEMINI_API_KEY`** (embedding RAG / impor PDF).
+
+Panduan lengkap sampai instance hidup: [`deploy/tencent/README.md`](deploy/tencent/README.md).
 
 ### Cara tercepat — Docker Compose
 
@@ -233,9 +309,9 @@ docker compose -f docker/docker-compose.yml down   # atau: npm run docker:down
 ```bash
 docker build -f docker/Dockerfile -t llm-auditor .   # atau: npm run docker:build
 docker run --rm -p 3000:3000 \
+  -e DATABASE_URL='postgresql://…neon.tech/neondb?sslmode=require' \
   -e GROQ_API_KEY=gsk_xxxxxxxx \
   -e GEMINI_API_KEY=AIza_xxxxxxxx \
-  -v auditor-data:/app/data \
   llm-auditor
 ```
 
@@ -252,9 +328,9 @@ docker buildx build -f docker/Dockerfile --platform linux/arm64 -t llm-auditor:a
 
 | Hal | Keterangan |
 |-----|------------|
-| **Persistensi** | DB + basis pengetahuan RAG disimpan di volume `auditor-data` (mount `/app/data`). `DB_PATH=/app/data/auditor.db`. |
+| **Persistensi** | Tidak ada di kontainer — seluruh state di Postgres (Neon) lewat `DATABASE_URL`. Kontainer boleh dibuang kapan saja. |
 | **Embedding** | Memakai **Gemini API** saat runtime — berikan `GEMINI_API_KEY` (env atau via `.env`). Tanpa key, fitur RAG nonaktif; fitur Groq lain tetap jalan. Tidak ada model lokal di image. |
-| **sqlite-vec** | Saat build, biner `vec0.so` Linux diunduh sesuai arsitektur; `SQLITE_VEC_PATH=/app/lib/vendor/vec0.so`. |
+| **Dependency** | `npm ci --omit=dev` di stage terpisah (express + driver Neon), jadi lapisan cache tidak batal setiap kali kode berubah. |
 | **Keamanan** | Kontainer berjalan sebagai user non-root `node`. `.env`, `data/` & `*.db` lokal **tidak** ikut ke image (lihat `docker/Dockerfile.dockerignore`). |
 | **Healthcheck** | Tersedia probe ke `/api/config`. |
 
@@ -276,7 +352,7 @@ Menu sidebar menyesuaikan peran tersebut; endpoint API juga memeriksanya di sisi
    membuat SQL `SELECT`, dieksekusi, hasil tampil sebagai tabel + query yang dipakai.
    Pertanyaan tentang **gap** dijawab akurat karena memakai *view* analitik (lihat di bawah).
 5. **Pengaturan** — **PDF Importer (RAG)**: seret/unggah PDF → jadi pengetahuan tambahan soal.
-   Lihat status `sqlite-vec`, daftar dokumen, **Uji Pencarian** (retrieval), panel
+   Lihat status vector store, daftar dokumen, **Uji Pencarian** (retrieval), panel
    **Konfigurasi Embedding (Gemini)** (isi `GEMINI_API_KEY`/model + toggle parser hierarki hukum),
    dan toggle **ReAct + RAG** untuk pembuatan kuis.
 
@@ -320,11 +396,11 @@ Fitur 7:  Peserta → gap (SQL view) → Groq generate 10 soal → jawab & nilai
 - **±390 hasil kuis** tersebar ~6 bulan terakhir.
 - Data **deterministik** (seeded PRNG) → hasil selalu sama. Gap dirancang realistis per divisi
   (mis. *Finance* lemah di *Network Security*, *IT* lemah di *Data Privacy* & *ISO 27001*).
-- Database: file `data/auditor.db` (SQLite via `node:sqlite`). **Ambang gap** = skor rata-rata `< 70`.
+- Database: **Postgres + pgvector** (Neon) lewat `DATABASE_URL`. **Ambang gap** = skor rata-rata `< 70`.
 
 ### View analitik (untuk SQL Agent)
 
-Logika "gap" (rata-rata skor `< 70`) **dibakukan ke dalam VIEW** SQLite agar SQL Agent menjawab
+Logika "gap" (rata-rata skor `< 70`) **dibakukan ke dalam VIEW** Postgres (`db/schema.sql`) agar SQL Agent menjawab
 pertanyaan gap dengan benar (kolom `is_gap = 1` menandai gap):
 
 | View | Granularitas |
@@ -401,17 +477,24 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 
 | Berkas | Peran |
 |--------|-------|
-| `server.js` | HTTP server (Node built-in), routing API, static files, loader `.env`, filter rentang waktu, endpoint PDF/settings |
-| `lib/db.js` | Skema + seed data dummy (deterministik) + helper analitik gap & tren + `app_settings` |
+| `server.js` | Entri **dev lokal**: HTTP server Node built-in + static files; memanggil router yang sama dengan produksi |
+| `cloud-functions/api/[[default]].js` | Entri **produksi**: Cloud Function EdgeOne (Express) yang mem-*mount* `lib/api.js` |
+| `lib/api.js` | Router JSON API bebas framework — seluruh rute `/api/*`, dipakai bersama oleh kedua entri |
+| `lib/pg.js` | Koneksi Postgres lewat driver HTTP Neon (`query/one/many/exec/scalar`) |
+| `db/schema.sql` | DDL Postgres: tabel, index, dan kelima view analitik gap |
+| `edgeone.json` | Konfigurasi Makers: versi Node, output statis, `maxDuration` function 120 detik |
+| `lib/db.js` | Akses data Postgres (async): penerapan skema, seed deterministik, helper analitik gap & tren, akun/sesi/throttle, `app_settings` |
 | `lib/groq.js` | Wrapper Groq Chat Completions + fitur AI (rekomendasi, topik kuis, SQL Agent) + **generator kuis ReAct + RAG** |
-| `lib/vec.js` | Basis pengetahuan RAG: chunking (**parser hierarki hukum** default + chunker paragraf generik) + index **sqlite-vec** (KNN) + reindex saat backend embedding berubah, fallback cosine JS |
+| `lib/vec.js` | Basis pengetahuan RAG: chunking (**parser hierarki hukum** default + chunker paragraf generik) + pencarian **pgvector** (cosine) + reindex saat backend embedding berubah |
 | `lib/embedder.js` | Embedder **Gemini-only** (`gemini-embedding-001`, 3072-dim) via `fetch`; butuh `GEMINI_API_KEY`, tanpa fallback lokal |
-| `lib/pdf.js` | Ekstraktor teks PDF zero-dependency (FlateDecode via `node:zlib`) |
-| `lib/vendor/vec0.dylib` | Ekstensi `sqlite-vec` (macOS arm64) untuk dev native; di Docker diganti `vec0.so` Linux |
+| `lib/pdf.js` | Ekstraktor teks PDF tanpa dependency (FlateDecode via `node:zlib`) |
 | `scripts/ingest_legal_pdf.py` | Ingest CLI massal PDF hukum (pypdf + Gemini) → menulis ke tabel RAG yang sama; `npm run ingest-legal` |
-| `scripts/test_auth.js` | Uji regresi autentikasi (42 pemeriksaan) di atas salinan DB; `npm run test:auth` |
-| `docker/` | Berkas Docker: `Dockerfile`, `docker-compose.yml`, `Dockerfile.dockerignore`. Image portabel (sqlite-vec; app zero-dependency); embedding RAG via Gemini API saat runtime. Konteks build = root |
-| `data/` | DB runtime SQLite (`data/auditor.db` + WAL) — auto-dibuat, di-gitignore; mirror volume Docker `/app/data` |
+| `scripts/db_setup.js` | Terapkan skema + seed + bootstrap akun staf; `npm run db:setup` |
+| `scripts/migrate_sqlite_to_pg.js` | Migrasi sekali jalan `data/auditor.db` → Postgres (embedding ikut, tanpa panggil Gemini); `npm run db:migrate` |
+| `scripts/test_auth.js` | Uji regresi autentikasi (43 pemeriksaan) di atas branch Neon uji; `npm run test:auth` |
+| `docker/` | Berkas Docker: `Dockerfile`, `docker-compose.yml`, `Dockerfile.dockerignore`. Image stateless; konteks build = root |
+| `data/auditor.db` | Snapshot SQLite lama — **hanya sumber migrasi**, tidak dibuka aplikasi |
+| `deploy/tencent/` | Jalur alternatif: deploy kontainer ke Tencent Cloud Lighthouse |
 | `lib/auth.js` | Autentikasi: hash scrypt, validasi pendaftaran, sesi + cookie, throttle login, bootstrap akun staf |
 | `public/index.html` | Struktur layar **Masuk/Daftar**, dashboard, tab **Pengaturan** & **Akun** |
 | `public/auth.css` | Tampilan layar Masuk/Daftar (register kontrol "kertas kerja" + stempel) |
@@ -426,7 +509,7 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
   via `fetch` (`taskType` `RETRIEVAL_DOCUMENT` untuk chunk, `RETRIEVAL_QUERY` untuk query).
   Butuh **`GEMINI_API_KEY`** (dari `.env` atau panel **Konfigurasi Embedding** di UI; nilai DB
   menang atas env). **Tidak ada fallback lokal/leksikal**: tanpa key, embedder gagal dan fitur RAG
-  nonaktif. Vektor di-L2-normalize sehingga jarak L2 (default vec0) setara peringkat cosine. Bila
+  nonaktif. Vektor di-L2-normalize sehingga `similarity = 1 - cosine_distance`. Bila
   nama/dimensi backend berubah dari yang tersimpan (`embed_meta`), `lib/vec.js` otomatis
   **reindex** (embed ulang semua chunk dari teks, dengan jeda agar tidak kena rate limit).
 - **Chunking hukum (default)**: saat impor PDF, `lib/vec.js` memakai **parser hierarki hukum**
@@ -434,15 +517,16 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
   memberi *breadcrumb* konteks pada tiap chunk. Bila toggle parser dimatikan, dipakai chunker
   paragraf generik. Untuk ingest massal di luar UI, lihat
   [Ingest massal PDF hukum (CLI)](#ingest-massal-pdf-hukum-cli) (`scripts/ingest_legal_pdf.py`).
-- **sqlite-vec**: potongan teks diindeks ke virtual table `vec0` dan dicari via KNN. Karena
-  vektor sudah dinormalisasi, peringkat jarak L2 setara cosine. Bila ekstensi gagal dimuat,
-  `lib/vec.js` otomatis beralih ke perhitungan cosine murni di JavaScript (hasil tetap benar).
+- **pgvector**: potongan teks disimpan di kolom `vector(3072)` dan dicari dengan operator jarak
+  cosine `<=>`. Belum ada index vektor — dengan ratusan chunk, sequential scan sudah sub-milidetik,
+  dan HNSW pada tipe `vector` memang dibatasi 2000 dimensi. Kalau korpus tumbuh besar, pindahkan
+  kolomnya ke `halfvec(3072)` lalu buat index HNSW.
 - **ReAct**: `generateQuizReAct()` menjalankan loop Thought → Action (`search_knowledge`) →
   Observation hingga materi cukup, lalu menyusun soal yang *grounded* pada konteks PDF.
   Toggle ReAct/RAG tersedia di tab **Pengaturan**.
 
-Alur data: `Browser → /api/* → server.js → lib/db.js (SQLite)` dan
-`server.js → lib/groq.js → Groq API` untuk fitur AI. Grafik tren digambar sebagai **SVG murni**
+Alur data: `Browser → /api/* → lib/api.js → lib/db.js → Postgres (Neon)` dan
+`lib/api.js → lib/groq.js → Groq API` untuk fitur AI. Grafik tren digambar sebagai **SVG murni**
 di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
 
 ---
@@ -484,10 +568,10 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
 | `Groq key loaded: NO` | Pastikan `GROQ_API_KEY` ada di `.env` dan server di-restart. |
 | Fitur AI error `Groq API 401` | Key salah/dicabut — buat key baru di console Groq. |
 | Fitur AI error `Groq API 429` | Rate limit tercapai — tunggu sebentar atau ganti model. |
-| `require('node:sqlite')` error | Versi Node < 22.5 — perbarui Node.js. |
-| Data ingin direset | `npm run seed` (atau hapus folder `data/`, lalu jalankan ulang). |
+| `DATABASE_URL belum disetel` | Isi connection string Neon di `.env`, lalu `npm run db:setup`. |
+| `relation "employees" does not exist` | Skema belum diterapkan — jalankan `npm run db:setup`. |
+| Data ingin direset | `npm run seed` (mengosongkan tabel operasional lalu mengisi ulang data dummy). |
 | Port 3000 dipakai | Ubah `PORT` di `.env`. |
 | `RAG init warning: GEMINI_API_KEY tidak disetel` | Impor PDF & retrieval RAG butuh Gemini — isi `GEMINI_API_KEY` di `.env` atau panel **Pengaturan → Konfigurasi Embedding**, lalu restart. |
 | Impor PDF error `Gemini 429` | Rate limit Gemini (free tier ~100 embed/menit) tercapai — tunggu sebentar, impor dokumen lebih kecil, atau pakai tier berbayar. |
-| `sqlite-vec tidak dimuat` di log | Native non-macOS-arm64 / Node < 23.5: set `SQLITE_VEC_PATH` ke `vec0.{so,dylib,dll}` yang sesuai, atau pakai Docker. App tetap jalan via fallback cosine JS. |
-| Data kuis/PDF hilang setelah `npm run docker:down` | Pastikan volume `auditor-data` tidak dihapus (`docker compose -f docker/docker-compose.yml down -v` menghapus volume). |
+| Kuis gagal dengan timeout di EdgeOne | Naikkan `cloudFunctions.nodejs.maxDuration` di `edgeone.json` (maks 120 detik), atau matikan toggle ReAct di tab Pengaturan. |

@@ -742,9 +742,8 @@ async function loadSettings() {
 
 function renderRagStatus(rag) {
   const box = $('#ragStatus'); if (!box || !rag) return;
-  const backend = rag.vecEnabled
-    ? '<span class="pill good">sqlite-vec aktif</span>'
-    : '<span class="pill warn">fallback cosine JS</span>';
+  // Vector store kini selalu pgvector; tidak ada lagi jalur fallback.
+  const backend = `<span class="pill good">${esc(rag.backend || 'pgvector')}</span>`;
   const emb = rag.embedderKind === 'model'
     ? `<span class="pill good">${esc(rag.embedder)}</span>`
     : `<span class="pill warn">${esc(rag.embedder || '–')}</span>`;

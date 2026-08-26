@@ -1,0 +1,10 @@
+{
+  "nodeVersion": "22.11.0",
+  "installCommand": "npm install",
+  "outputDirectory": "public",
+  "cloudFunctions": {
+    "nodejs": {
+      "maxDuration": 120
+    }
+  }
+}

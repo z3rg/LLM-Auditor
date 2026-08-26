@@ -1,21 +1,27 @@
 {
   "name": "llm-auditor",
-  "version": "1.0.0",
-  "description": "IT Auditor quiz analytics with Groq AI: knowledge-gap recommendations, quiz topic suggestions, and a Super Admin -> SQL Agent -> Director acknowledgement workflow.",
+  "version": "2.0.0",
+  "description": "IT Auditor quiz analytics with Groq AI: knowledge-gap recommendations, quiz topic suggestions, and a Super Admin -> SQL Agent -> Director acknowledgement workflow. Berjalan di EdgeOne Makers dengan Postgres (Neon) + pgvector.",
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "seed": "node -e \"require('./lib/db').reseed(); console.log('Database reseeded.')\"",
+    "db:setup": "node scripts/db_setup.js",
+    "db:migrate": "node scripts/migrate_sqlite_to_pg.js",
+    "seed": "node scripts/db_setup.js --reseed",
     "ingest-legal": "python3 scripts/ingest_legal_pdf.py",
     "test:auth": "node scripts/test_auth.js",
     "docker:build": "docker build -f docker/Dockerfile -t llm-auditor .",
-    "docker:run": "docker run --rm -p 3000:3000 --env-file .env -v auditor-data:/app/data llm-auditor",
+    "docker:run": "docker run --rm -p 3000:3000 --env-file .env llm-auditor",
     "docker:up": "docker compose -f docker/docker-compose.yml --env-file .env up --build -d",
     "docker:down": "docker compose -f docker/docker-compose.yml down"
   },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
+    "express": "^4.21.2"
+  },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=20.0.0"
   },
   "keywords": [
     "it-audit",
@@ -25,10 +31,11 @@
     "quiz",
     "knowledge-gap",
     "rag",
-    "sqlite-vec",
-    "react",
+    "pgvector",
+    "postgres",
+    "edgeone",
     "embeddings"
   ],
   "license": "MIT",
-  "//": "Inti app zero-dependency. Embedding RAG memakai Gemini API (gemini-embedding-001) — butuh GEMINI_API_KEY, tanpa dependency npm tambahan."
+  "//": "State aplikasi ada di Postgres (Neon) + pgvector — butuh DATABASE_URL. Fitur AI memakai Groq (GROQ_API_KEY); embedding RAG memakai Gemini gemini-embedding-001 (GEMINI_API_KEY). Skrip scripts/migrate_sqlite_to_pg.js memakai node:sqlite dan hanya jalan di Node >= 22.5 (lokal)."
 }

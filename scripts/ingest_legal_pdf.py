@@ -1,20 +1,21 @@
 """
 Legal PDF ingestion pipeline for Indonesian OJK regulation (PADK).
 Parses hierarchical structure: BAB (chapter) > A./B. (section) > 1./2. (point) > a./b. (sub-point)
-Embeds each chunk with gemini-embedding-001 (3072-dim) and stores in auditor.db (sqlite-vec).
+Embeds each chunk with gemini-embedding-001 (3072-dim) and stores it in Postgres (pgvector).
 
 This script feeds directly into the Node.js LLM Auditor RAG pipeline — it writes to the same
-pdf_documents / pdf_chunks / vec_pdf_chunks tables that the web app reads from.
+pdf_documents / pdf_chunks tables that the web app reads from. Skemanya dimiliki
+db/schema.sql; jalankan `npm run db:setup` lebih dulu.
 
 Prerequisites:
-    pip install pypdf google-genai sqlite-vec
+    pip install pypdf google-genai "psycopg[binary]"
 
 Usage:
     export GEMINI_API_KEY="your-key-here"
+    export DATABASE_URL="postgresql://…"        # connection string Neon, sama dengan app
     python3 scripts/ingest_legal_pdf.py /path/to/document.pdf
 
-    # Optional overrides (defaults match the Node.js app's .env):
-    DB_PATH=/custom/path/to/auditor.db python3 scripts/ingest_legal_pdf.py doc.pdf
+    # Optional override:
     GEMINI_EMBED_MODEL=gemini-embedding-001 python3 scripts/ingest_legal_pdf.py doc.pdf
 """
 
@@ -23,21 +24,18 @@ import re
 import sys
 import json
 import time
-import struct
-import sqlite3
 import unicodedata
 from dataclasses import dataclass
 from typing import Optional
 
-import sqlite_vec
+import psycopg
 from pypdf import PdfReader
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 _SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
 
-DB_PATH    = os.environ.get("DB_PATH",   os.path.join(_PROJECT_ROOT, "data", "auditor.db"))
-VEC_EXT    = os.environ.get("SQLITE_VEC_PATH", os.path.join(_PROJECT_ROOT, "lib", "vendor", "vec0.dylib"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 EMBED_MODEL = os.environ.get("GEMINI_EMBED_MODEL", "gemini-embedding-001")
 EMBED_DIM  = 3072
 TASK_DOC   = "RETRIEVAL_DOCUMENT"
@@ -212,89 +210,46 @@ def embed_text(client, text: str, task_type: str = TASK_DOC) -> list[float]:
     return result.embeddings[0].values
 
 
-# ── STEP 5: SQLITE STORAGE (same schema as Node.js app) ──────────────────────
-def serialize_f32(vector: list[float]) -> bytes:
-    return struct.pack(f"{len(vector)}f", *vector)
+# ── STEP 5: POSTGRES STORAGE (skema yang sama dengan app Node.js) ────────────
+def to_vector(vector: list[float]) -> str:
+    """list[float] -> literal pgvector '[0.1,0.2,…]'."""
+    return "[" + ",".join(repr(float(v)) for v in vector) + "]"
 
 
-def init_db(db_path: str) -> sqlite3.Connection:
-    db = sqlite3.connect(db_path)
-    db.execute("PRAGMA journal_mode = WAL")
-    db.execute("PRAGMA foreign_keys = ON")
-
-    # Load sqlite-vec extension (same .dylib the Node.js app uses).
-    db.enable_load_extension(True)
-    try:
-        sqlite_vec.load(db)
-        print(f"      sqlite-vec loaded from Python package.")
-    except Exception:
-        try:
-            db.load_extension(VEC_EXT.replace(".dylib", ""))
-            print(f"      sqlite-vec loaded from {VEC_EXT}")
-        except Exception as e:
-            raise RuntimeError(f"Cannot load sqlite-vec: {e}") from e
-    db.enable_load_extension(False)
-
-    # Mirror the Node.js app schema exactly so vec.js can read our rows.
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS pdf_documents (
-            id         INTEGER PRIMARY KEY,
-            filename   TEXT NOT NULL,
-            title      TEXT,
-            num_pages  INTEGER,
-            num_chunks INTEGER NOT NULL DEFAULT 0,
-            bytes      INTEGER,
-            chars      INTEGER,
-            created_at TEXT NOT NULL
+def init_db(database_url: str):
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL belum disetel. Isi connection string Neon yang sama dengan app."
         )
-    """)
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS pdf_chunks (
-            id          INTEGER PRIMARY KEY,
-            doc_id      INTEGER NOT NULL REFERENCES pdf_documents(id) ON DELETE CASCADE,
-            chunk_index INTEGER NOT NULL,
-            content     TEXT NOT NULL,
-            embedding   BLOB
-        )
-    """)
-    db.execute("CREATE INDEX IF NOT EXISTS idx_pdf_chunks_doc ON pdf_chunks(doc_id)")
+    db = psycopg.connect(database_url)
 
-    # vec0 virtual table — only create if it doesn't exist yet.
-    # Node.js manages this table; we create it here if the script is run first.
-    db.execute(f"""
-        CREATE VIRTUAL TABLE IF NOT EXISTS vec_pdf_chunks
-        USING vec0(embedding float[{EMBED_DIM}])
-    """)
-
-    # Tell the Node.js reconcile() that this DB is now in Gemini mode so it
-    # won't re-embed everything the next time the server starts.
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL
+    # Skema dimiliki db/schema.sql — di sini cukup dipastikan sudah ada, supaya
+    # kegagalannya jelas alih-alih 'relation does not exist' di tengah ingest.
+    with db.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.pdf_chunks')")
+        if cur.fetchone()[0] is None:
+            raise RuntimeError(
+                "Tabel pdf_chunks belum ada. Jalankan `npm run db:setup` lebih dulu."
+            )
+        # Beri tahu reconcile() di lib/vec.js bahwa database ini memakai Gemini,
+        # agar server tidak meng-embed ulang semuanya saat start berikutnya.
+        cur.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('embed_meta', %s) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (json.dumps({"name": f"gemini:{EMBED_MODEL}", "dim": EMBED_DIM}),),
         )
-    """)
-    db.execute(
-        "INSERT INTO app_settings (key, value) VALUES ('embed_meta', ?) "
-        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (json.dumps({"name": f"gemini:{EMBED_MODEL}", "dim": EMBED_DIM}),),
-    )
     db.commit()
     return db
 
 
-def store_chunk(db: sqlite3.Connection, chunk: Chunk, doc_id: int,
+def store_chunk(db, chunk: Chunk, doc_id: int,
                 chunk_index: int, embedding: list[float]):
-    blob = serialize_f32(embedding)
-    cur = db.execute(
-        "INSERT INTO pdf_chunks (doc_id, chunk_index, content, embedding) VALUES (?, ?, ?, ?)",
-        (doc_id, chunk_index, chunk.text, blob),
-    )
-    chunk_id = cur.lastrowid
-    db.execute(
-        "INSERT INTO vec_pdf_chunks (rowid, embedding) VALUES (?, ?)",
-        (chunk_id, blob),
-    )
+    with db.cursor() as cur:
+        cur.execute(
+            "INSERT INTO pdf_chunks (doc_id, chunk_index, content, embedding) "
+            "VALUES (%s, %s, %s, %s::vector)",
+            (doc_id, chunk_index, chunk.text, to_vector(embedding)),
+        )
 
 
 # ── MAIN PIPELINE ─────────────────────────────────────────────────────────────
@@ -317,18 +272,20 @@ def main(pdf_path: str):
 
     full_text_chars = sum(len(c.text) for c in chunks)
 
-    print("[4/5] Connecting to DB and embedding with Gemini ...")
+    print("[4/5] Connecting to Postgres and embedding with Gemini ...")
     client = get_genai_client()
-    db = init_db(DB_PATH)
+    db = init_db(DATABASE_URL)
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    cur = db.execute(
-        "INSERT INTO pdf_documents (filename, title, num_pages, num_chunks, bytes, chars, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (source_name, title, len(pages), len(chunks), file_bytes, full_text_chars, now),
-    )
-    doc_id = cur.lastrowid
+    with db.cursor() as cur:
+        cur.execute(
+            "INSERT INTO pdf_documents (filename, title, num_pages, num_chunks, bytes, chars, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (source_name, title, len(pages), len(chunks), file_bytes, full_text_chars, now),
+        )
+        doc_id = cur.fetchone()[0]
+    db.commit()
 
     embedded_count = 0
     for i, chunk in enumerate(chunks):
@@ -343,14 +300,15 @@ def main(pdf_path: str):
             db.commit()
         time.sleep(API_SLEEP)
 
-    db.execute(
-        "UPDATE pdf_documents SET num_chunks = ? WHERE id = ?",
-        (embedded_count, doc_id),
-    )
+    with db.cursor() as cur:
+        cur.execute(
+            "UPDATE pdf_documents SET num_chunks = %s WHERE id = %s",
+            (embedded_count, doc_id),
+        )
     db.commit()
 
     print(f"[5/5] Done. {embedded_count}/{len(chunks)} chunks embedded.")
-    print(f"      Document ID {doc_id} stored in {DB_PATH}")
+    print(f"      Document ID {doc_id} stored in Postgres.")
     db.close()
 
 
