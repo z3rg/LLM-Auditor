@@ -19,8 +19,15 @@ export async function onRequest(context) {
     now: new Date().toISOString(),
     env: {
       MAKERS_MODELS_KEY: isSet('MAKERS_MODELS_KEY'),
+      EDGEONE_PROJECT_ID: isSet('EDGEONE_PROJECT_ID') || isSet('PAGES_PROJECT_ID'),
+      EDGEONE_BLOB_TOKEN: isSet('EDGEONE_BLOB_TOKEN') || isSet('PAGES_BLOB_DEPLOY_CREDENTIAL'),
       BLOB_STORE_NAME: isSet('BLOB_STORE_NAME'),
-      BLOB_LOCAL_DIR: isSet('BLOB_LOCAL_DIR'),
+    },
+    // Ringkasan siap-tidaknya, supaya satu panggilan cukup untuk tahu apa yang kurang.
+    ready: {
+      ai: isSet('MAKERS_MODELS_KEY'),
+      blob: (isSet('EDGEONE_PROJECT_ID') || isSet('PAGES_PROJECT_ID'))
+        && (isSet('EDGEONE_BLOB_TOKEN') || isSet('PAGES_BLOB_DEPLOY_CREDENTIAL')),
     },
   }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
