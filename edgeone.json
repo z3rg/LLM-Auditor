@@ -1,6 +1,6 @@
 {
   "nodeVersion": "20.18.0",
-  "installCommand": "npm install",
+  "installCommand": "npm install --omit=dev",
   "outputDirectory": "public",
   "cloudFunctions": {
     "nodejs": {

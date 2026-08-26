@@ -269,7 +269,7 @@ sudah ada di `edgeone.json`, jadi biarkan terdeteksi otomatis:
 | Field | Nilai | Sumber |
 |-------|-------|--------|
 | Node version | `20.18.0` | `nodeVersion` — menyamai runtime Cloud Functions (v20.x) |
-| Install command | `npm install` | `installCommand` |
+| Install command | `npm install --omit=dev` | `installCommand` — esbuild hanya dipakai lokal, artefak function sudah di-commit |
 | Output directory | `public` | `outputDirectory` — situs statis tanpa build step |
 | Function timeout | `120` detik | `cloudFunctions.nodejs.maxDuration` (default 30 detik, maks 120) |
 
