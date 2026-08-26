@@ -23,23 +23,29 @@ OUT='cloud-functions/api/[[default]].js'
 #    dan kecurigaan itulah yang sedang diuji lewat salinan p6.js di bawah.
 BANNER='import{fileURLToPath as __f}from"node:url";import{dirname as __d}from"node:path";import{createRequire as __cr}from"node:module";const __filename=__f(import.meta.url);const __dirname=__d(__filename);if(!globalThis.require)globalThis.require=__cr(import.meta.url);'
 
-# Driver Neon ikut di-inline (tanpa --external) supaya artefak tidak bergantung
-# pada resolusi node_modules di /var/user — satu-satunya sisa ketergantungan
-# adalah modul bawaan Node.
+# Driver Neon dibiarkan EXTERNAL: entry meng-import-nya sebagai import ESM asli
+# sehingga bundler platform yang meresolusinya. Saat driver ini di-inline,
+# artefaknya ditolak builder (rute tidak pernah terdaftar, 404).
 npx esbuild functions-src/api-entry.mjs \
   --bundle \
   --platform=node \
   --format=esm \
   --target=node20 \
+  --external:@neondatabase/serverless \
   --banner:js="$BANNER" \
   --outfile="$OUT" \
   --log-level=warning
 
-# Salinan identik dengan nama berkas BIASA. Eksperimen pemisah: kalau /api/p6
-# hidup sementara /api/config 404, masalahnya pada pendaftaran rute catch-all
-# `[[default]].js`, bukan pada isi bundle. Hapus setelah terjawab.
-cp "$OUT" cloud-functions/api/p6.js
+# Probe ukuran. Handler sepele + padding sampai ~320 KB — sebesar artefak yang
+# ditolak builder saat driver Neon masih di-inline. Kalau /api/p7 hidup, ukuran
+# bukan penyebabnya dan yang bermasalah adalah ISI bundle. Hapus setelah terjawab.
+{
+  printf '/** Probe ukuran: handler sepele + padding. */\n'
+  printf 'export default function onRequest(){return new Response(JSON.stringify({ok:true,probe:"p7-ukuran",bytes:%s}),{headers:{"Content-Type":"application/json"}});}\n' "$(wc -c < "$OUT" | tr -d ' ')"
+  printf '// padding:\n'
+  yes '// xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' 2>/dev/null | head -4200
+} > cloud-functions/api/p7.js
 
 printf '  Artefak: %s (%s)\n' "$OUT" "$(du -h "$OUT" | cut -f1)"
-printf '  Salinan uji: cloud-functions/api/p6.js\n'
+printf '  Probe ukuran: cloud-functions/api/p7.js (%s)\n' "$(du -h cloud-functions/api/p7.js | cut -f1)"
 printf '  Modul eksternal tersisa: %s\n' "$(grep -oE "from ?\"[^\"]+\"" "$OUT" | grep -v '"node:' | sort -u | tr '\n' ' ')"</dev/null

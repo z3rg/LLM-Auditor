@@ -34,6 +34,15 @@ const WATCHDOG_MS = Number(process.env.FUNCTION_WATCHDOG_MS || 100_000);
 // Di-inline oleh esbuild saat build; tidak ada resolusi modul saat runtime.
 import apiRouter from '../lib/api.js';
 
+// Driver Neon SENGAJA tidak ikut di-bundle: paket itu membawa internal ws
+// dengan require opsional ke modul native, dan bundler platform menolak artefak
+// yang memuatnya (p6 dan [[default]].js sama-sama 404 saat driver di-inline).
+// Sebagai import ESM asli, paketnya diresolusi oleh bundler platform — yang
+// terbukti sanggup (probe p4).
+import { neon } from '@neondatabase/serverless';
+import pgClient from '../lib/pg.js';
+pgClient.setNeonFactory(neon);
+
 function loadRouter() {
   return apiRouter;
 }
