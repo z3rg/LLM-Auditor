@@ -46,6 +46,7 @@ npx esbuild functions-src/api-entry.mjs \
   yes '// xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' 2>/dev/null | head -4200
 } > cloud-functions/api/p7.js
 
+# p8/p9 dibuat manual sekali (lihat riwayat commit) dan tidak di-regenerate di sini.
 printf '  Artefak: %s (%s)\n' "$OUT" "$(du -h "$OUT" | cut -f1)"
 printf '  Probe ukuran: cloud-functions/api/p7.js (%s)\n' "$(du -h cloud-functions/api/p7.js | cut -f1)"
 printf '  Modul eksternal tersisa: %s\n' "$(grep -oE "from ?\"[^\"]+\"" "$OUT" | grep -v '"node:' | sort -u | tr '\n' ' ')"</dev/null
