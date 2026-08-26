@@ -21,8 +21,37 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/**
+ * Id percakapan Makers — WAJIB pada setiap request ke Agent Functions.
+ *
+ * Runtime agent menolak request tanpa header ini dengan 400 ("Invalid
+ * makers-conversation-id"), jadi tanpa ini seluruh aplikasi mati di browser,
+ * termasuk daftar divisi di formulir pendaftaran.
+ *
+ * Nilainya ditahan di localStorage supaya satu browser tetap dilayani instance
+ * agent yang sama (Session mode) — cache dalam proses di sisi server jadi
+ * benar-benar terpakai. Format yang diterima: 6-36 karakter [0-9a-zA-Z-_.].
+ */
+const CONVERSATION_KEY = 'llm-auditor-conversation-id';
+function conversationId() {
+  try {
+    let id = localStorage.getItem(CONVERSATION_KEY);
+    if (id && /^[0-9a-zA-Z\-_.]{6,36}$/.test(id)) return id;
+    id = (crypto.randomUUID && crypto.randomUUID()) || `c-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(CONVERSATION_KEY, id);
+    return id;
+  } catch (_) {
+    // Mode privat / storage diblokir: id sekali pakai tetap lebih baik daripada 400.
+    return `c-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 function api(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const headers = {
+    'Content-Type': 'application/json',
+    'makers-conversation-id': conversationId(),
+    ...(opts.headers || {}),
+  };
   return fetch(path, { credentials: 'same-origin', ...opts, headers }).then(async (r) => {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {

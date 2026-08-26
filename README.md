@@ -197,8 +197,21 @@ build sudah ada di `edgeone.json`:
 
 ### 5. Isi environment variable
 
-Di konsol project, isi **`MAKERS_MODELS_KEY`**. Itu saja — kredensial Blob disuntik platform,
-jadi `EDGEONE_PROJECT_ID` / `EDGEONE_BLOB_TOKEN` **tidak boleh** diisi di sini.
+Di konsol project, isi tiga variabel:
+
+| Variabel | Nilai |
+|----------|-------|
+| `MAKERS_MODELS_KEY` | Kunci dari **Models → API Key** |
+| `EDGEONE_PROJECT_ID` | Id project, mis. `makers-xxxxxxxxxxxx` |
+| `EDGEONE_BLOB_TOKEN` | Token dari **Project Settings → API Token** |
+
+> **Kredensial Blob TIDAK disuntik otomatis di sini.** SDK memakai placeholder
+> `{{PAGES_BLOB_DEPLOY_CREDENTIAL}}` yang hanya disubstitusi kalau paketnya diproses builder.
+> Karena `@edgeone/pages-blob` didaftarkan di `agents.externalNodeModules`, platform memasangnya
+> apa adanya dari npm sehingga placeholder itu tidak pernah diganti, dan Blob menjawab
+> `Missing: token`. Menyetel kedua variabel di atas membuat SDK dipakai dalam mode token.
+> (SDK juga membaca `PAGES_PROJECT_ID` / `PAGES_BLOB_DEPLOY_CREDENTIAL`; `lib/blob.js` menerima
+> kedua penamaan.)
 
 Opsional: `MAKERS_MODEL`, `SEED_PASSWORD`, `BLOB_STORE_NAME`, `BLOB_CACHE_TTL_MS`.
 
@@ -217,7 +230,16 @@ curl -s https://<project>.edgeone.dev/api/ping
 curl -s https://<project>.edgeone.dev/api/config
 ```
 
-`/api/config` yang sehat memuat `"hasKey": true` dan `"aiProvider": "EdgeOne Makers (DeepSeek)"`.
+Kedua perintah di atas **wajib menyertakan header `makers-conversation-id`**, karena runtime
+Agent menolak request tanpa itu dengan `400`:
+
+```bash
+curl -s -H "makers-conversation-id: $(uuidgen)" https://<project>.edgeone.dev/api/ping
+```
+
+`/api/ping` yang sehat memuat `"runtime": "edgeone-makers-agents"` — itu penanda paling cepat
+bahwa kode versi agent benar-benar aktif. `/api/config` yang sehat memuat `"hasKey": true` dan
+`"aiProvider": "EdgeOne Makers (DeepSeek)"`.
 Login lewat browser; karena EdgeOne mengakhiri TLS dan meneruskan `X-Forwarded-Proto: https`,
 cookie sesi otomatis ber-`Secure` tanpa perubahan konfigurasi.
 
@@ -229,6 +251,8 @@ cookie sesi otomatis ber-`Secure` tanpa perubahan konfigurasi.
 | Objek Blob | **25 MB**/objek | Objek terbesar di aplikasi ini beberapa KB |
 | Konsistensi Blob | *eventual* ≤60 detik | Modul penyimpanan memakai `consistency: "strong"` untuk semua baca — lihat [Arsitektur](#arsitektur) |
 | Eksekusi agent | 200 rb/bulan (free tier) | Satu kali muat halaman memakai beberapa eksekusi |
+| Header wajib | `makers-conversation-id` | 6-36 karakter `[0-9a-zA-Z-_.]`; tanpa itu **semua** rute menjawab 400. Frontend membuat & menyimpannya di `localStorage` |
+| Versi Node | runtime agent memakai **v24** | `nodeVersion` di `edgeone.json` tidak mengubah ini |
 
 ---
 

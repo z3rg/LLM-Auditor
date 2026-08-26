@@ -146,7 +146,25 @@ rata-rata dihitung dari seluruh attempt, persis seperti view lama. Jangan "diser
 
 ---
 
-## 6. Routing Agent Functions
+## 6. Header `makers-conversation-id`
+
+Runtime Agent **menolak setiap request** yang tidak membawa header ini:
+
+```
+400 {"error":"Invalid makers-conversation-id: header is missing.
+              Required: 6-36 characters, allowed: [0-9a-zA-Z-_.]"}
+```
+
+Ini bukan opsi. Mode Agent adalah **Session mode**: header itu yang menentukan request mana
+dilayani instance mana. `public/app.js` membuat satu id per browser lewat `conversationId()`
+dan menyimpannya di `localStorage`, sehingga satu pengguna tetap mendarat di instance yang sama
+dan cache dalam proses di `lib/blob.js` benar-benar terpakai.
+
+Konsekuensi untuk pengujian manual: `curl` ke API terdeploy juga harus menyertakannya.
+
+---
+
+## 7. Routing Agent Functions
 
 Routing EdgeOne berbasis berkas. Resolvernya (disalin dari CLI):
 
@@ -166,7 +184,7 @@ Konsekuensi yang mahal ditemukan:
 
 ---
 
-## 7. Resep "Cara Menambah …"
+## 8. Resep "Cara Menambah …"
 
 ### Menambah endpoint API
 1. Tambahkan cabang di fungsi `api()` di `lib/api.js` (cek `req.method` + `p`, gunakan
@@ -190,7 +208,7 @@ lalu `<section class="tab hidden" id="tab-…">`. Muat datanya di `app.js` mengi
 
 ---
 
-## 8. Referensi Variabel Lingkungan
+## 9. Referensi Variabel Lingkungan
 
 | Variabel | Wajib | Keterangan |
 |----------|-------|------------|
@@ -205,12 +223,16 @@ lalu `<section class="tab hidden" id="tab-…">`. Muat datanya di `app.js` mengi
 | `PORT` | tidak | Default 3000 (dev lokal) |
 | `FUNCTION_WATCHDOG_MS` | tidak | Batas watchdog jembatan agent; default 280000 |
 
-**Di dalam EdgeOne Makers, cukup isi `MAKERS_MODELS_KEY`.** Kredensial Blob disuntik platform;
-mengisi `EDGEONE_PROJECT_ID`/`EDGEONE_BLOB_TOKEN` di sana justru salah.
+**Di konsol Makers isi ketiganya**: `MAKERS_MODELS_KEY`, `EDGEONE_PROJECT_ID`, dan
+`EDGEONE_BLOB_TOKEN`. Kredensial Blob TIDAK disuntik otomatis untuk Agent Functions yang
+mendaftarkan SDK-nya di `externalNodeModules` — placeholder
+`{{PAGES_BLOB_DEPLOY_CREDENTIAL}}` di dalam paket npm tidak pernah disubstitusi, dan Blob
+menjawab `Missing: token`. `lib/blob.js` juga menerima nama milik SDK sendiri
+(`PAGES_PROJECT_ID` / `PAGES_BLOB_DEPLOY_CREDENTIAL`).
 
 ---
 
-## 9. Verifikasi
+## 10. Verifikasi
 
 ### Uji otomatis — `npm run test:auth`
 
@@ -239,7 +261,7 @@ masalahnya ada di graf modul `lib/` atau dependency runtime — bukan di routing
 
 ---
 
-## 10. Ide Pengembangan Lanjutan
+## 11. Ide Pengembangan Lanjutan
 
 - **Ekspor terjadwal**: `npm run backup` lewat cron/Actions — Blob tidak punya point-in-time
   restore, jadi ini satu-satunya jaring pengaman.
