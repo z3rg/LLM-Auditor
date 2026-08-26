@@ -197,21 +197,37 @@ build sudah ada di `edgeone.json`:
 
 ### 5. Isi environment variable
 
-Di konsol project, isi tiga variabel:
+Di konsol project, isi **`MAKERS_MODELS_KEY`** (Models → API Key). Itu untuk fitur AI.
 
-| Variabel | Nilai |
-|----------|-------|
-| `MAKERS_MODELS_KEY` | Kunci dari **Models → API Key** |
-| `EDGEONE_PROJECT_ID` | Id project, mis. `makers-xxxxxxxxxxxx` |
-| `EDGEONE_BLOB_TOKEN` | Token dari **Project Settings → API Token** |
+Untuk Blob, **coba tanpa kredensial apa pun lebih dulu.** Autentikasi Pages Blob di dalam
+Makers seharusnya otomatis: SDK membawa placeholder `{{PAGES_BLOB_DEPLOY_CREDENTIAL}}` yang
+disubstitusi builder saat build.
 
-> **Kredensial Blob TIDAK disuntik otomatis di sini.** SDK memakai placeholder
-> `{{PAGES_BLOB_DEPLOY_CREDENTIAL}}` yang hanya disubstitusi kalau paketnya diproses builder.
-> Karena `@edgeone/pages-blob` didaftarkan di `agents.externalNodeModules`, platform memasangnya
-> apa adanya dari npm sehingga placeholder itu tidak pernah diganti, dan Blob menjawab
-> `Missing: token`. Menyetel kedua variabel di atas membuat SDK dipakai dalam mode token.
-> (SDK juga membaca `PAGES_PROJECT_ID` / `PAGES_BLOB_DEPLOY_CREDENTIAL`; `lib/blob.js` menerima
-> kedua penamaan.)
+> **Jangan daftarkan `@edgeone/pages-blob` di `agents.externalNodeModules`.** Kalau didaftarkan,
+> platform memasangnya apa adanya dari npm, placeholder itu tidak pernah diganti, dan Blob
+> menjawab `Missing: token` berapa kali pun di-deploy ulang — meski dokumentasi bilang
+> autentikasinya otomatis. Ini pernah memakan beberapa siklus deploy.
+
+Pastikan lewat probe:
+
+```bash
+curl -s -H "makers-conversation-id: $(uuidgen)" https://<project>.edgeone.dev/api/ping
+```
+
+- `"blobCredentialPatched": true` → autentikasi otomatis aktif, tidak perlu token sama sekali.
+- `"blobCredentialPatched": false` → builder tidak menambal SDK. Pakai **mode token** sebagai
+  jalan keluar: isi `EDGEONE_PROJECT_ID` (id project, mis. `makers-xxxx`) dan
+  `EDGEONE_BLOB_TOKEN` (Project Settings → **API Token**). `lib/blob.js` juga menerima nama
+  milik SDK sendiri (`PAGES_PROJECT_ID` / `PAGES_BLOB_DEPLOY_CREDENTIAL`).
+
+Variabel bisa disetel lewat CLI setelah `edgeone makers link`:
+
+```bash
+edgeone makers env set MAKERS_MODELS_KEY '…'
+edgeone makers env ls
+```
+
+Perubahan variabel **baru berlaku setelah deploy ulang**.
 
 Opsional: `MAKERS_MODEL`, `SEED_PASSWORD`, `BLOB_STORE_NAME`, `BLOB_CACHE_TTL_MS`.
 

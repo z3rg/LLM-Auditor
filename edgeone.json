@@ -1,14 +1,11 @@
 {
-  "//": "Deploy EdgeOne Makers. API dijalankan sebagai Agent Functions (agents/), bukan Cloud Functions: mode agent memuat berkas rute sebagai modul Node biasa dengan node_modules terpasang, sehingga graf modul lib/ tidak perlu di-bundle sendiri, SDK Blob dipasang platform, dan batas eksekusinya 3600 detik (bukan 120).",
+  "//": "Deploy EdgeOne Makers. API dijalankan sebagai Agent Functions (agents/), bukan Cloud Functions: mode agent memuat berkas rute sebagai modul Node biasa dengan node_modules terpasang, sehingga graf modul lib/ tidak perlu di-bundle sendiri, dan batas eksekusinya 3600 detik (bukan 120). @edgeone/pages-blob SENGAJA TIDAK didaftarkan di externalNodeModules: SDK-nya membawa placeholder {{PAGES_BLOB_DEPLOY_CREDENTIAL}} yang hanya disubstitusi kalau paketnya diproses builder. Saat didaftarkan sebagai external, platform memasangnya apa adanya dari npm, placeholder itu tetap utuh, dan Blob menjawab 'Missing: token' meski dokumentasi bilang autentikasi di dalam Makers otomatis.",
   "installCommand": "npm install --omit=dev",
   "outputDirectory": "public",
   "nodeVersion": "20.18.0",
   "agents": {
     "dir": "agents",
     "framework": "openai-sdk",
-    "timeout": 300,
-    "externalNodeModules": [
-      "@edgeone/pages-blob"
-    ]
+    "timeout": 300
   }
 }
