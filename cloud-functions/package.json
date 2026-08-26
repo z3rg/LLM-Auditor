@@ -1,7 +1,0 @@
-{
-  "//": "Menandai berkas .js di folder ini sebagai ESM. dependencies dideklarasikan lagi di sini karena artefak function meng-import @neondatabase/serverless sebagai import ESM asli (tidak di-bundle) — builder EdgeOne memasang dependency dari package.json di direktori function.",
-  "type": "module",
-  "dependencies": {
-    "@neondatabase/serverless": "^1.0.0"
-  }
-}

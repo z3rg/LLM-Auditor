@@ -1,0 +1,4 @@
+{
+  "//": "Menandai berkas .js di agents/ sebagai ESM, sementara root repo tetap \"type\": \"commonjs\" untuk lib/. Node & esbuild memilih \"type\" dari package.json TERDEKAT, jadi agents/*.js diurai sebagai ESM sedangkan ../lib/*.js tetap CommonJS — persis pembagian yang diinginkan. Ekstensi .js dipakai (bukan .mjs) karena resolver rute EdgeOne memotong ekstensi dengan pola yang tidak selalu memuat mjs; berkas .mjs berisiko terdaftar sebagai /api/config.mjs.",
+  "type": "module"
+}

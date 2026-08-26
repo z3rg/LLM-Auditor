@@ -30,13 +30,11 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 
 ```
 server.js              Entri DEV LOKAL: HTTP server + static files + warmup RAG
-cloud-functions/
-  package.json         {"type":"module"} — menandai folder ini ESM, lib/ tetap CommonJS
-  api/[[default]].js   ARTEFAK bundle (hasil npm run build:function) - di-commit
-  api/ping.js          Probe tanpa import: menguji runtime function
-functions-src/
-  api-entry.mjs        SUMBER cloud function: adapter Fetch -> req/res Node -> lib/api.js
-edgeone.json           Konfigurasi Makers: nodeVersion, outputDirectory, maxDuration 120s
+agents/                EdgeOne Makers Agent Functions - entri PRODUKSI seluruh /api/*
+  _api.js              Jembatan privat (awalan "_" = bukan rute): context agent -> lib/api.js
+  api/**.js            Satu berkas per endpoint, dihasilkan npm run agents:routes
+  api/ping.js          Probe tanpa import: menguji runtime agent terpisah dari graf lib/
+edgeone.json           Konfigurasi Makers: nodeVersion, outputDirectory, blok agents
 db/
   schema.sql           DDL Postgres: tabel, index, kelima view analitik gap
 lib/

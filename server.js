@@ -3,8 +3,8 @@
  * LLM Auditor — entri pengembangan lokal.
  *
  * Di produksi (EdgeOne Makers) berkas ini TIDAK dipakai: frontend disajikan
- * static hosting dan API dijalankan sebagai Cloud Function
- * (cloud-functions/api/[[default]].js). Keduanya memakai router yang sama,
+ * static hosting dan API dijalankan sebagai Agent Functions (agents/api/**,
+ * lewat jembatan agents/_api.js). Keduanya memakai router yang sama,
  * lib/api.js, sehingga perilaku lokal dan terdeploy tidak bercabang.
  *
  * Butuh DATABASE_URL (Neon). Siapkan skema & data awal sekali dengan:

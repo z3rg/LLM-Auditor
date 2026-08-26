@@ -221,8 +221,8 @@ ada re-embed saat server restart).
 
 ## Deploy ke EdgeOne Makers
 
-Target deploy utama. Frontend disajikan static hosting, `/api/*` berjalan sebagai Cloud Function,
-dan seluruh state ada di Neon — instance-nya sendiri tidak menyimpan apa pun.
+Target deploy utama. Frontend disajikan static hosting, `/api/*` berjalan sebagai **Agent Functions**
+(`agents/`), dan seluruh state ada di Neon — instance-nya sendiri tidak menyimpan apa pun.
 
 ### 1. Siapkan database
 
@@ -237,22 +237,40 @@ DATABASE_URL='…' npm run db:migrate
 Konsol Makers → **Models → API Key** → buat & salin. Itu satu-satunya kunci yang dibutuhkan untuk
 fitur AI: gateway menyediakan model bawaan (`@makers/deepseek-v4-flash`) tanpa perlu akun vendor.
 
-### 3. Bangun artefak function
+### 3. Rute API (hanya bila menambah endpoint)
 
 ```bash
-npm run build:function
+npm run agents:routes
 ```
 
-Cloud function dideploy sebagai **satu berkas mandiri** hasil esbuild, dan artefaknya di-commit.
-Ini bukan kerumitan yang dicari-cari: bundler platform menyerah pada graf modul `lib/` dan
-meninggalkan import-nya sebagai `require` runtime, yang lalu gagal dengan
-`Cannot find module '../../lib/api.js'` di `/var/user/index.mjs`. Dengan mem-bundle sendiri,
-artefaknya tidak punya import relatif sama sekali dan bisa diuji lokal sebelum dikirim.
+API dideploy sebagai **Agent Functions**: routing EdgeOne Makers berbasis berkas, jadi tiap
+endpoint butuh satu berkas di `agents/api/`. Berkasnya tipis — semuanya meneruskan ke
+`agents/_api.mjs`, yang menjembatani context agent ke router `lib/api.js`. Daftar endpoint ada
+di `scripts/generate_agent_routes.mjs`; tambahkan di sana lalu jalankan perintah di atas.
 
-> **Jalankan ulang setiap kali `lib/` atau `functions-src/` berubah.** Kalau lupa, deployment
-> masih memakai artefak lama dan perubahan Anda tidak akan terlihat.
+Tidak ada langkah bundle. Mode agent memuat berkas rute sebagai modul Node biasa dengan
+`node_modules` terpasang, jadi `import '../lib/api.js'` tetap import relatif dan dependency
+runtime cukup didaftarkan di `edgeone.json` → `agents.externalNodeModules`. (Mode
+`cloud-functions/` sebelumnya mem-bundle tiap function jadi satu `/var/user/index.mjs` dan
+bundler-nya menyerah pada graf modul `lib/` — itulah yang dulu memaksa artefak esbuild
+di-commit.) Bonus: batas eksekusi mode agent 3600 detik, bukan 120.
 
-### 4. Deploy
+### 4. Uji rute agent secara lokal
+
+Sebelum deploy, jalankan runtime Makers di mesin sendiri — ini yang membuktikan seluruh berkas
+di `agents/api/` benar-benar terdaftar sebagai rute (termasuk segmen dinamis seperti
+`pdf/documents/[id]`), bukan sekadar lolos sintaks:
+
+```bash
+npx edgeone login             # sekali saja; atau set EDGEONE_PAGES_API_TOKEN
+npm run dev:makers            # DSH lokal di http://localhost:8088
+curl -s localhost:8088/api/ping | jq
+```
+
+`/api/ping` sengaja tidak meng-import apa pun dari `lib/`: kalau ia hidup tapi rute lain mati,
+masalahnya ada di graf modul `lib/` atau dependency runtime — bukan di routing.
+
+### 5. Deploy
 
 Lewat CLI (paling langsung):
 
@@ -268,12 +286,14 @@ sudah ada di `edgeone.json`, jadi biarkan terdeteksi otomatis:
 
 | Field | Nilai | Sumber |
 |-------|-------|--------|
-| Node version | `20.18.0` | `nodeVersion` — menyamai runtime Cloud Functions (v20.x) |
-| Install command | `npm install --omit=dev` | `installCommand` — esbuild hanya dipakai lokal, artefak function sudah di-commit |
+| Node version | `20.18.0` | `nodeVersion` — runtime Node yang dipakai Makers (v20.x) |
+| Install command | `npm install --omit=dev` | `installCommand` — CLI `edgeone` hanya dipakai lokal |
 | Output directory | `public` | `outputDirectory` — situs statis tanpa build step |
-| Function timeout | `120` detik | `cloudFunctions.nodejs.maxDuration` (default 30 detik, maks 120) |
+| Direktori agent | `agents` | `agents.dir` — routing berbasis berkas untuk seluruh `/api/*` |
+| Agent timeout | `300` detik | `agents.timeout` (mode agent mengizinkan sampai 3600) |
+| Dependency runtime | `@neondatabase/serverless` | `agents.externalNodeModules` — didaftarkan, bukan di-bundle |
 
-### 5. Isi environment variable
+### 6. Isi environment variable
 
 Di **Project settings → Environment variables**, atau dari CLI (`edgeone makers env set KEY value`):
 
@@ -288,10 +308,9 @@ Di **Project settings → Environment variables**, atau dari CLI (`edgeone maker
 
 Perubahan env var hanya berlaku untuk deployment **berikutnya**, tidak mengubah yang sudah jalan.
 
-### 6. Verifikasi
+### 7. Verifikasi
 
 ```bash
-edgeone makers dev            # emulasi lokal di http://localhost:8088
 curl -s https://<project>.edgeone.dev/api/ping     # probe tanpa dependency
 curl -s https://<project>.edgeone.dev/api/config
 ```
@@ -304,7 +323,7 @@ objek `rag`. Login lewat browser; karena EdgeOne mengakhiri TLS dan meneruskan
 
 | Batas | Nilai | Dampak |
 |-------|-------|--------|
-| Durasi function | maks **120 detik** | Generate kuis ReAct memanggil LLM 2x + 12 embedding Gemini; jalur normal ±25-60 detik |
+| Durasi agent | `300` detik (maks **3600**) | Generate kuis ReAct memanggil LLM 2x + 12 embedding Gemini; jalur normal ±25-60 detik |
 | Body request | **6 MB** | Batas unggah PDF disamakan di `lib/api.js`; seluruh PDF POJK di repo < 600 KB |
 | Paket kode | **128 MB** | Termasuk `node_modules`; dua dependency runtime saja, jadi longgar |
 | Runtime | **Node.js v20.x** | Tidak ada filesystem persisten — karena itu state pindah ke Postgres |
@@ -522,13 +541,13 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | Berkas | Peran |
 |--------|-------|
 | `server.js` | Entri **dev lokal**: HTTP server Node built-in + static files; memanggil router yang sama dengan produksi |
-| `functions-src/api-entry.mjs` | **Sumber** cloud function: adapter Fetch → req/res Node → `lib/api.js`, dengan watchdog |
-| `cloud-functions/api/[[default]].js` | **Artefak** hasil `npm run build:function` — bundle mandiri, sengaja di-commit |
-| `scripts/build_function.sh` | esbuild: inline `lib/` + driver Neon jadi satu berkas tanpa import eksternal |
+| `agents/_api.js` | Jembatan privat Agent Functions: context agent → req/res Node → `lib/api.js`, dengan watchdog |
+| `agents/api/**.js` | Satu berkas tipis per endpoint (routing berbasis berkas), semuanya meneruskan ke `_api.mjs` |
+| `scripts/generate_agent_routes.mjs` | Daftar endpoint + generator berkas rute (`npm run agents:routes`) |
 | `lib/api.js` | Router JSON API bebas framework — seluruh rute `/api/*`, dipakai bersama oleh kedua entri |
 | `lib/pg.js` | Koneksi Postgres lewat driver HTTP Neon (`query/one/many/exec/scalar`) |
 | `db/schema.sql` | DDL Postgres: tabel, index, dan kelima view analitik gap |
-| `edgeone.json` | Konfigurasi Makers: versi Node, output statis, `maxDuration` function 120 detik |
+| `edgeone.json` | Konfigurasi Makers: versi Node, output statis, blok `agents` (dir, timeout, `externalNodeModules`) |
 | `lib/db.js` | Akses data Postgres (async): penerapan skema, seed deterministik, helper analitik gap & tren, akun/sesi/throttle, `app_settings` |
 | `lib/ai.js` | Wrapper Chat Completions OpenAI-compatible (default: AI Gateway Makers, alternatif Groq) + fitur AI + **generator kuis ReAct + RAG** |
 | `lib/vec.js` | Basis pengetahuan RAG: chunking (**parser hierarki hukum** default + chunker paragraf generik) + pencarian **pgvector** (cosine) + reindex saat backend embedding berubah |
@@ -620,4 +639,4 @@ di sisi klien (tanpa library chart/CDN), sehingga tetap berfungsi offline.
 | Port 3000 dipakai | Ubah `PORT` di `.env`. |
 | `RAG init warning: GEMINI_API_KEY tidak disetel` | Impor PDF & retrieval RAG butuh Gemini — isi `GEMINI_API_KEY` di `.env` atau panel **Pengaturan → Konfigurasi Embedding**, lalu restart. |
 | Impor PDF error `Gemini 429` | Rate limit Gemini (free tier ~100 embed/menit) tercapai — tunggu sebentar, impor dokumen lebih kecil, atau pakai tier berbayar. |
-| Kuis gagal dengan timeout di EdgeOne | Naikkan `cloudFunctions.nodejs.maxDuration` di `edgeone.json` (maks 120 detik), atau matikan toggle ReAct di tab Pengaturan. |
+| Kuis gagal dengan timeout di EdgeOne | Naikkan `agents.timeout` di `edgeone.json` (maks 3600 detik), atau matikan toggle ReAct di tab Pengaturan. |

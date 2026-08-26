@@ -29,3 +29,7 @@ npm-debug.log*
 *.mp4
 *.pptx
 /dokumentasi.pdf
+
+# Tencent Cloud EdgeOne (ditambahkan `edgeone login`)
+.edgeone/*
+.tef_dist/*
