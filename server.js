@@ -7,8 +7,10 @@
  * lewat jembatan agents/_api.js). Keduanya memakai router yang sama,
  * lib/api.js, sehingga perilaku lokal dan terdeploy tidak bercabang.
  *
- * Butuh DATABASE_URL (Neon). Siapkan skema & data awal sekali dengan:
- *   npm run db:setup
+ * Butuh backend Blob. Untuk dev lokal set BLOB_LOCAL_DIR di .env (berkas biasa,
+ * tanpa kredensial); untuk menunjuk Blob sungguhan set EDGEONE_PROJECT_ID +
+ * EDGEONE_BLOB_TOKEN. Isi data awal sekali dengan:
+ *   npm run seed
  */
 require('./lib/env').loadEnv();
 
@@ -18,7 +20,7 @@ const path = require('node:path');
 
 const apiRouter = require('./lib/api');
 const ai = require('./lib/ai');
-const vec = require('./lib/vec');
+const db = require('./lib/db');
 const auth = require('./lib/auth');
 
 const PORT = process.env.PORT || 3000;
@@ -52,34 +54,37 @@ const server = http.createServer((req, res) => {
 });
 
 (async () => {
-  if (!process.env.DATABASE_URL) {
-    console.error('\n  DATABASE_URL belum disetel. Isi di .env (connection string Neon), lalu jalankan `npm run db:setup`.\n');
+  const local = process.env.BLOB_LOCAL_DIR;
+  const remote = process.env.EDGEONE_PROJECT_ID && process.env.EDGEONE_BLOB_TOKEN;
+  if (!local && !remote) {
+    console.error('\n  Backend Blob belum dipilih. Set BLOB_LOCAL_DIR di .env untuk dev lokal,');
+    console.error('  atau EDGEONE_PROJECT_ID + EDGEONE_BLOB_TOKEN untuk memakai Blob sungguhan.\n');
     process.exit(1);
   }
 
-  // Hangatkan embedder RAG sebelum melayani request.
-  try { await vec.ready(); } catch (e) { console.warn('  RAG init warning:', e.message); }
+  // Isi data awal bila store masih kosong — di Postgres ini dulu langkah
+  // terpisah (`db:setup`) karena DDL mahal; di Blob seed-nya idempoten & murah.
+  try { await db.seed(); } catch (e) {
+    console.error(`\n  Gagal menyiapkan data awal: ${e.message}\n`);
+    process.exit(1);
+  }
 
   // Beri kata sandi awal untuk akun staf bawaan (sekali saja, saat pertama jalan).
   let boot = { seeded: [], seedPassword: null };
   try {
     boot = await auth.bootstrap();
   } catch (e) {
-    console.error(`\n  Gagal menyiapkan akun staf: ${e.message}`);
-    console.error('  Skema database sudah dibuat? Jalankan `npm run db:setup` lebih dulu.\n');
+    console.error(`\n  Gagal menyiapkan akun staf: ${e.message}\n`);
     process.exit(1);
   }
 
-  const r = await vec.stats();
   server.listen(PORT, () => {
     console.log(`\n  LLM Auditor running:  http://localhost:${PORT}`);
     const aiCfg = ai.cfg();
     console.log(`  LLM provider:         ${aiCfg.providerLabel}`);
     console.log(`  LLM model:            ${aiCfg.model}`);
     console.log(`  LLM key loaded:       ${aiCfg.key ? 'yes' : `NO — set ${aiCfg.keyEnv} in .env`}`);
-    console.log(`  Database:             Postgres (Neon)`);
-    console.log(`  RAG embedder:         ${r.embedder} (dim ${r.dim})`);
-    console.log(`  RAG vector store:     ${r.backend} — ${r.chunks} chunk`);
+    console.log(`  Penyimpanan:          EdgeOne Blob (${local ? `lokal: ${local}` : 'remote'})`);
     if (boot.seeded.length) {
       console.log(`\n  Akun staf disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
       for (const email of boot.seeded) console.log(`    · ${email}`);

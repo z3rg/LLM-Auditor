@@ -18,10 +18,9 @@ export async function onRequest(context) {
     node: process.version,
     now: new Date().toISOString(),
     env: {
-      DATABASE_URL: isSet('DATABASE_URL'),
       MAKERS_MODELS_KEY: isSet('MAKERS_MODELS_KEY'),
-      GROQ_API_KEY: isSet('GROQ_API_KEY'),
-      GEMINI_API_KEY: isSet('GEMINI_API_KEY'),
+      BLOB_STORE_NAME: isSet('BLOB_STORE_NAME'),
+      BLOB_LOCAL_DIR: isSet('BLOB_LOCAL_DIR'),
     },
   }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }

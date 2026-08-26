@@ -1,45 +1,36 @@
 {
   "name": "llm-auditor",
   "version": "2.0.0",
-  "description": "IT Auditor quiz analytics with Groq AI: knowledge-gap recommendations, quiz topic suggestions, and a Super Admin -> SQL Agent -> Director acknowledgement workflow. Berjalan di EdgeOne Makers dengan Postgres (Neon) + pgvector.",
+  "description": "IT Auditor quiz analytics on EdgeOne Makers: DeepSeek-powered knowledge-gap recommendations and quiz generation, with accounts, sessions, and quiz results stored in EdgeOne Blob.",
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "db:setup": "node scripts/db_setup.js",
-    "db:migrate": "node scripts/migrate_sqlite_to_pg.js",
-    "seed": "node scripts/db_setup.js --reseed",
-    "ingest-legal": "python3 scripts/ingest_legal_pdf.py",
+    "dev:makers": "npx edgeone makers dev",
+    "seed": "node scripts/seed_blob.js",
+    "seed:reset": "node scripts/seed_blob.js --reseed",
+    "backup": "node scripts/blob_backup.js dump",
+    "restore": "node scripts/blob_backup.js restore",
     "test:auth": "node scripts/test_auth.js",
-    "docker:build": "docker build -f docker/Dockerfile -t llm-auditor .",
-    "docker:run": "docker run --rm -p 3000:3000 --env-file .env llm-auditor",
-    "docker:up": "docker compose -f docker/docker-compose.yml --env-file .env up --build -d",
-    "docker:down": "docker compose -f docker/docker-compose.yml down",
-    "agents:routes": "node scripts/generate_agent_routes.mjs",
-    "dev:makers": "edgeone makers dev"
+    "agents:routes": "node scripts/generate_agent_routes.mjs"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.0"
+    "@edgeone/pages-blob": "^0.0.16"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "keywords": [
     "it-audit",
-    "groq",
+    "deepseek",
     "llm",
-    "sql-agent",
     "quiz",
     "knowledge-gap",
-    "rag",
-    "pgvector",
-    "postgres",
     "edgeone",
-    "embeddings"
+    "edgeone-makers",
+    "blob",
+    "agents"
   ],
   "license": "MIT",
-  "//": "State aplikasi ada di Postgres (Neon) + pgvector — butuh DATABASE_URL. Fitur AI memakai Groq (GROQ_API_KEY); embedding RAG memakai Gemini gemini-embedding-001 (GEMINI_API_KEY). API produksi dijalankan sebagai EdgeOne Makers Agent Functions di agents/ (lihat edgeone.json). Skrip scripts/migrate_sqlite_to_pg.js memakai node:sqlite dan hanya jalan di Node >= 22.5 (lokal).",
-  "devDependencies": {
-    "edgeone": "^1.6.28"
-  }
+  "//": "State aplikasi ada di EdgeOne Blob (object store) — tidak ada database SQL. Fitur AI memakai DeepSeek lewat AI Gateway Makers (MAKERS_MODELS_KEY). API produksi dijalankan sebagai EdgeOne Makers Agent Functions di agents/ (lihat edgeone.json). Untuk dev lokal set BLOB_LOCAL_DIR; untuk menunjuk Blob sungguhan set EDGEONE_PROJECT_ID + EDGEONE_BLOB_TOKEN."
 }

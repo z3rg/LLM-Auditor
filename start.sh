@@ -60,7 +60,7 @@ ok "Node.js $NODE_VER"
 if [ ! -f .env ]; then
   if [ -f .env.example ]; then
     cp .env.example .env
-    warn ".env belum ada — disalin dari .env.example. Isi DATABASE_URL dan MAKERS_MODELS_KEY Anda."
+    warn ".env belum ada — disalin dari .env.example. Isi MAKERS_MODELS_KEY dan BLOB_LOCAL_DIR Anda."
   else
     err ".env dan .env.example tidak ada. Tidak bisa lanjut."
     exit 1
@@ -73,33 +73,33 @@ fi
 read_env() { sed -n "s/^$1=//p" .env | head -1 | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'; }
 PORT="$(read_env PORT)"; PORT="${PORT:-3000}"
 API_KEY="$(read_env MAKERS_MODELS_KEY)"
-[ -z "$API_KEY" ] && API_KEY="$(read_env GROQ_API_KEY)"
 if [ -z "$API_KEY" ] || [ "$API_KEY" = "your_groq_api_key_here" ]; then
   warn "Kunci LLM belum diisi di .env — fitur AI (rekomendasi, SQL Agent, kuis) tidak akan jalan."
-  warn "Ambil MAKERS_MODELS_KEY di konsol Makers → Models → API Key, atau pakai GROQ_API_KEY."
+  warn "Ambil MAKERS_MODELS_KEY di konsol Makers → Models → API Key."
 else
   ok "Kunci LLM terpasang"
 fi
 
-DB_URL="$(read_env DATABASE_URL)"
-if [ -z "$DB_URL" ] || case "$DB_URL" in *user:password@*) true ;; *) false ;; esac; then
-  err "DATABASE_URL belum diisi di .env."
-  err "Buat database Postgres gratis di https://neon.tech, tempel connection string-nya,"
-  err "lalu jalankan: npm run db:setup"
+BLOB_DIR="$(read_env BLOB_LOCAL_DIR)"
+BLOB_PROJECT="$(read_env EDGEONE_PROJECT_ID)"
+if [ -z "$BLOB_DIR" ] && [ -z "$BLOB_PROJECT" ]; then
+  err "Backend penyimpanan belum dipilih di .env."
+  err "Dev lokal : BLOB_LOCAL_DIR=./.blob-data"
+  err "Blob asli : EDGEONE_PROJECT_ID + EDGEONE_BLOB_TOKEN (konsol Makers → Project Settings → API Token)"
   exit 1
 fi
-ok "DATABASE_URL terpasang"
+ok "Penyimpanan terpasang"
 
 # --- 3. Dependency & penyiapan database -------------------------------------
 if [ ! -d node_modules ]; then
-  info "Memasang dependency (driver Neon)…"
+  info "Memasang dependency (SDK EdgeOne Blob)…"
   npm install --no-audit --no-fund || { err "npm install gagal."; exit 1; }
 fi
 ok "Dependency siap"
 
 if [ "$DO_RESEED" -eq 1 ]; then
   info "Mereset & mengisi ulang data dummy…"
-  node scripts/db_setup.js --reseed || { err "Reseed gagal."; exit 1; }
+  node scripts/seed_blob.js --reseed || { err "Reseed gagal."; exit 1; }
   ok "Data dummy diisi ulang"
 fi
 

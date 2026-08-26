@@ -256,7 +256,6 @@ async function enterApp(user) {
     loadOverview();
     loadScopeOptions();
     loadAcks();
-    buildSqlExamples();
   }
   // activate the first permitted tab
   if (firstTab) {
@@ -621,62 +620,6 @@ async function loadTrend() {
 }
 
 // ---------------------------------------------------------------------------
-// SQL Agent
-// ---------------------------------------------------------------------------
-const SQL_EXAMPLES = [
-  'Divisi mana dengan skor rata-rata terendah?',
-  'Divisi dengan jumlah gap pengetahuan terbanyak',
-  'Karyawan dengan gap pengetahuan terbanyak',
-  'Topik dengan skor rata-rata terendah',
-  'Apa saja gap pengetahuan di divisi IT?',
-  'Tren skor rata-rata per bulan',
-];
-function buildSqlExamples() {
-  const box = $('#sqlExamples'); if (!box) return;
-  box.innerHTML = '<span class="muted">Contoh:</span> ';
-  SQL_EXAMPLES.forEach((q) => {
-    const b = el('button', 'btn ghost sm', esc(q));
-    b.addEventListener('click', () => { $('#sqlQuestion').value = q; askSql(); });
-    box.appendChild(b);
-  });
-}
-$('#askSql').addEventListener('click', askSql);
-$('#sqlQuestion').addEventListener('keydown', (e) => { if (e.key === 'Enter') askSql(); });
-
-// Round floats for display; pass through everything else.
-function fmtCell(v) {
-  if (typeof v === 'number' && !Number.isInteger(v)) return Math.round(v * 100) / 100;
-  return v;
-}
-
-async function askSql() {
-  const q = $('#sqlQuestion').value.trim();
-  const box = $('#sqlResult');
-  if (!q) return;
-  box.innerHTML = '<div class="panel"><span class="spinner"></span> SQL Agent berpikir…</div>';
-  try {
-    const out = await api('/api/sql-agent', { method: 'POST', body: JSON.stringify({ question: q }) });
-    let table = '<div class="notice">Query berhasil dijalankan, tetapi tidak ada baris yang cocok. Coba ubah/sederhanakan pertanyaan.</div>';
-    if (out.runError) {
-      table = `<div class="notice err">Eksekusi gagal: ${esc(out.runError)}</div>`;
-    } else if (out.rows.length) {
-      const head = out.columns.map((c) => `<th>${esc(c)}</th>`).join('');
-      const body = out.rows.map((r) => `<tr>${out.columns.map((c) => `<td>${esc(fmtCell(r[c]))}</td>`).join('')}</tr>`).join('');
-      table = `<div class="scroll-x"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-    }
-    box.innerHTML = `
-      <div class="panel">
-        <h3>Hasil <span class="pill muted">${esc(out.model || state.config.model)}</span> <span class="pill info">${out.rowCount} baris</span>${out.repaired ? ' <span class="pill warn">diperbaiki otomatis</span>' : ''}</h3>
-        <p class="muted">${esc(out.explanation || '')}</p>
-        <div class="codeblock">${esc(out.sql)}</div>
-        <div style="margin-top:12px">${table}</div>
-      </div>`;
-  } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal: ${esc(e.message)}</div>`;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Acknowledgement (Feature 3b)
 // ---------------------------------------------------------------------------
 async function loadAcks() {
@@ -725,170 +668,14 @@ async function loadAcks() {
 function safeArr(s) { try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
 
 // ---------------------------------------------------------------------------
-// Pengaturan: PDF Importer (RAG) + toggle ReAct
+// Pengaturan
 // ---------------------------------------------------------------------------
 async function loadSettings() {
   if (state.role !== 'super_admin') return;
   try {
     const s = await api('/api/settings');
-    renderRagStatus(s.rag);
-    $('#tglReact').checked = !!s.quizUseReact;
-    $('#tglRag').checked = !!s.quizUseRag;
-    const tl = $('#tglLegalMode'); if (tl) tl.checked = !!s.pdfLegalMode;
+    const t = $('#tglPlanned'); if (t) t.checked = !!s.quizPlanned;
   } catch (_) {}
-  loadPdfDocs();
-  loadEmbedConfig();
-}
-
-function renderRagStatus(rag) {
-  const box = $('#ragStatus'); if (!box || !rag) return;
-  // Vector store kini selalu pgvector; tidak ada lagi jalur fallback.
-  const backend = `<span class="pill good">${esc(rag.backend || 'pgvector')}</span>`;
-  const emb = rag.embedderKind === 'model'
-    ? `<span class="pill good">${esc(rag.embedder)}</span>`
-    : `<span class="pill warn">${esc(rag.embedder || '–')}</span>`;
-  box.innerHTML = `
-    <span>Embedding model: ${emb}</span>
-    <span>Vector store: ${backend}</span>
-    <span>Dokumen: <strong>${rag.documents}</strong></span>
-    <span>Potongan (chunk): <strong>${rag.chunks}</strong></span>
-    <span>Dimensi: <strong>${rag.dim ?? '–'}</strong></span>`;
-}
-
-async function loadPdfDocs() {
-  const box = $('#pdfDocs'); if (!box) return;
-  try {
-    const data = await api('/api/pdf/documents');
-    renderRagStatus(data.rag);
-    if (!data.documents.length) {
-      box.innerHTML = '<div class="muted">Belum ada PDF yang diimpor. Unggah PDF untuk menambah pengetahuan soal kuis.</div>';
-      return;
-    }
-    const rows = data.documents.map((d) => `
-      <tr>
-        <td>${esc(d.title || d.filename)}</td>
-        <td><span class="muted">${d.num_pages || '–'}</span></td>
-        <td>${d.num_chunks}</td>
-        <td><span class="muted">${fmtBytes(d.bytes)}</span></td>
-        <td><span class="muted">${new Date(d.created_at).toLocaleString('id-ID')}</span></td>
-        <td><button class="btn ghost sm" data-del="${d.id}">🗑 Hapus</button></td>
-      </tr>`).join('');
-    box.innerHTML = `
-      <div class="scroll-x"><table>
-        <thead><tr><th>Judul</th><th>Hal</th><th>Chunk</th><th>Ukuran</th><th>Diunggah</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
-    box.querySelectorAll('button[data-del]').forEach((b) =>
-      b.addEventListener('click', () => deletePdf(Number(b.dataset.del))));
-  } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal memuat dokumen: ${esc(e.message)}</div>`;
-  }
-}
-function fmtBytes(n) {
-  if (!n) return '–';
-  if (n < 1024) return n + ' B';
-  if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
-  return (n / 1048576).toFixed(1) + ' MB';
-}
-
-async function deletePdf(id) {
-  if (!confirm('Hapus dokumen ini dari basis pengetahuan?')) return;
-  try { await api(`/api/pdf/documents/${id}`, { method: 'DELETE' }); loadPdfDocs(); }
-  catch (e) { alert(e.message); }
-}
-
-async function uploadPdfFiles(files) {
-  const msg = $('#pdfImportMsg');
-  const list = [...files].filter((f) => /pdf$/i.test(f.name) || f.type === 'application/pdf');
-  if (!list.length) { msg.innerHTML = '<div class="notice err">Pilih berkas PDF.</div>'; return; }
-  for (const file of list) {
-    msg.innerHTML = `<div class="notice"><span class="spinner"></span> Mengimpor <strong>${esc(file.name)}</strong>…</div>`;
-    try {
-      const buf = await file.arrayBuffer();
-      const r = await fetch('/api/pdf/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/pdf', 'x-filename': encodeURIComponent(file.name) },
-        credentials: 'same-origin',
-        body: buf,
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-      const d = data.document;
-      msg.innerHTML = `<div class="notice ok">✓ <strong>${esc(d.title)}</strong> diimpor — ${d.num_chunks} chunk dari ${d.chars.toLocaleString('id-ID')} karakter.</div>`;
-      renderRagStatus(data.rag);
-    } catch (e) {
-      msg.innerHTML = `<div class="notice err">Gagal mengimpor ${esc(file.name)}: ${esc(e.message)}</div>`;
-    }
-  }
-  loadPdfDocs();
-}
-
-async function ragSearch() {
-  const q = $('#ragQuery').value.trim();
-  const box = $('#ragSearchResult');
-  if (!q) return;
-  box.innerHTML = '<div class="notice"><span class="spinner"></span> Mencari…</div>';
-  try {
-    const data = await api('/api/pdf/search', { method: 'POST', body: JSON.stringify({ query: q }) });
-    if (!data.results.length) { box.innerHTML = '<div class="notice">Tidak ada hasil. Impor PDF terlebih dulu atau ubah kata kunci.</div>'; return; }
-    box.innerHTML = data.results.map((r, i) => `
-      <div class="card" style="margin-top:8px">
-        <div class="row" style="justify-content:space-between">
-          <strong>#${i + 1} · ${esc(r.source)}</strong>
-          <span class="pill info">skor ${r.similarity}</span>
-        </div>
-        <div class="muted" style="margin-top:6px;white-space:pre-wrap">${esc(r.content.slice(0, 360))}…</div>
-      </div>`).join('');
-  } catch (e) {
-    box.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Embedding backend config
-// ---------------------------------------------------------------------------
-async function loadEmbedConfig() {
-  try {
-    const data = await api('/api/settings/embed');
-    const mi = $('#geminiModelInput');
-    if (mi && data.geminiModel) mi.value = data.geminiModel;
-    const ki = $('#geminiKeyInput');
-    if (ki && data.hasGeminiKey) ki.placeholder = '●●●●●●●● (sudah disetel — kosongkan untuk tidak mengubah)';
-    const tl = $('#tglLegalMode'); if (tl) tl.checked = data.legalMode !== false;
-    renderEmbedStatus(data.current);
-  } catch (_) {}
-}
-
-function renderEmbedStatus(current) {
-  const box = $('#embedStatus'); if (!box) return;
-  if (!current) { box.innerHTML = '<span class="muted">Belum diinisialisasi.</span>'; return; }
-  const kind = current.kind === 'model' ? 'good' : 'warn';
-  box.innerHTML = `
-    <span>Backend aktif: <span class="pill ${kind}">${esc(current.name)}</span></span>
-    <span>Dimensi vektor: <strong>${current.dim}</strong></span>`;
-}
-
-async function applyEmbedConfig() {
-  const msg = $('#embedMsg');
-  const geminiKey  = (($('#geminiKeyInput') || {}).value || '').trim();
-  const geminiModel = (($('#geminiModelInput') || {}).value || '').trim();
-  const legalMode  = !!(($('#tglLegalMode') || {}).checked);
-  if (msg) msg.innerHTML = '<div class="notice"><span class="spinner"></span> Menerapkan konfigurasi embedding…</div>';
-  try {
-    const body = { legalMode };
-    if (geminiKey) body.geminiKey = geminiKey;
-    if (geminiModel) body.geminiModel = geminiModel;
-    const data = await api('/api/settings/embed', { method: 'POST', body: JSON.stringify(body) });
-    renderEmbedStatus(data.current);
-    renderRagStatus(data.rag);
-    const name = data.current ? data.current.name : 'gemini';
-    if (msg) msg.innerHTML = `<div class="notice ok">✓ Backend <strong>${esc(name)}</strong> aktif. Reindex berjalan di background.</div>`;
-    const ki = $('#geminiKeyInput');
-    if (ki && geminiKey) { ki.value = ''; ki.placeholder = '●●●●●●●● (sudah disetel — kosongkan untuk tidak mengubah)'; }
-    setTimeout(() => { const m = $('#embedMsg'); if (m) m.innerHTML = ''; }, 4000);
-  } catch (e) {
-    if (msg) msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
-  }
 }
 
 async function saveQuizSetting(key, value) {
@@ -900,22 +687,9 @@ async function saveQuizSetting(key, value) {
   } catch (e) { msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`; }
 }
 
-// Wire up Settings controls (elements exist statically in index.html).
 (function initSettingsUI() {
-  const drop = $('#pdfDrop'), input = $('#pdfInput');
-  if (drop && input) {
-    drop.addEventListener('click', () => input.click());
-    input.addEventListener('change', () => { if (input.files.length) uploadPdfFiles(input.files); input.value = ''; });
-    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
-    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); }));
-    drop.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) uploadPdfFiles(e.dataTransfer.files); });
-  }
-  const sbtn = $('#ragSearchBtn'); if (sbtn) sbtn.addEventListener('click', ragSearch);
-  const rq = $('#ragQuery'); if (rq) rq.addEventListener('keydown', (e) => { if (e.key === 'Enter') ragSearch(); });
-  const tr = $('#tglReact'); if (tr) tr.addEventListener('change', () => saveQuizSetting('quizUseReact', tr.checked));
-  const tg = $('#tglRag'); if (tg) tg.addEventListener('change', () => saveQuizSetting('quizUseRag', tg.checked));
-  const tl = $('#tglLegalMode'); if (tl) tl.addEventListener('change', () => saveQuizSetting('pdfLegalMode', tl.checked));
-  const ab = $('#applyEmbedBtn'); if (ab) ab.addEventListener('click', applyEmbedConfig);
+  const t = $('#tglPlanned');
+  if (t) t.addEventListener('change', () => saveQuizSetting('quizPlanned', t.checked));
 })();
 
 // ---------------------------------------------------------------------------
@@ -963,8 +737,6 @@ async function loadNewQuiz() {
           <thead><tr><th>#</th><th>Topik</th><th>Area</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
-        <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Lihat query SQL daftar topik</summary>
-          <div class="codeblock" style="margin-top:8px">${esc(data.sql)}</div></details>
       </div>`;
     gapBox.querySelectorAll('button[data-topic]').forEach((b) =>
       b.addEventListener('click', () => startQuiz(Number(b.dataset.topic), b.dataset.name,
@@ -977,7 +749,7 @@ async function loadNewQuiz() {
 async function startQuiz(topicId, topicName, ctx) {
   const playBox = ctx.playBox;
   state.activeQuizCtx = ctx;
-  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> Agen <strong>ReAct + RAG</strong> sedang menalar sub-konsep, menarik materi per soal dari basis pengetahuan, lalu menyusun soal untuk <strong>${esc(topicName)}</strong>…</div>`;
+  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> <strong>DeepSeek</strong> sedang merencanakan sub-konsep lalu menyusun soal untuk <strong>${esc(topicName)}</strong>…</div>`;
   playBox.scrollIntoView({ block: 'start' });
   try {
     const quiz = await api('/api/quiz/generate', {
@@ -987,7 +759,7 @@ async function startQuiz(topicId, topicName, ctx) {
     const items = quiz.questions.map((q) => `
       <div class="card" style="margin-top:10px" data-q="${q.i}">
         <div style="font-weight:600;margin-bottom:4px">${q.i + 1}. ${esc(q.question)}</div>
-        <div style="margin-bottom:8px">${sourceLineHtml(q)}</div>
+        ${q.subconcept ? `<div class="muted" style="margin-bottom:8px;font-size:12px">${esc(q.subconcept)}</div>` : ''}
         ${q.options.map((opt, oi) => `
           <label style="display:flex;gap:9px;align-items:flex-start;padding:6px 0;cursor:pointer">
             <input type="radio" name="q${q.i}" value="${oi}" style="margin-top:3px" />
@@ -999,15 +771,11 @@ async function startQuiz(topicId, topicName, ctx) {
         <div class="page-head" style="margin:0 0 6px"><div>
           <h3 style="margin:0">Kuis: ${esc(quiz.topic)}
             <span class="pill muted">${esc(quiz.model || state.config.model)}</span>
-            ${quiz.method === 'ReAct' ? '<span class="pill info">🧠 ReAct</span>' : ''}
-            ${quiz.groundedCount ? `<span class="pill good">📚 ${quiz.groundedCount}/${quiz.num_questions} soal berbasis PDF</span>` : ''}
+            ${quiz.method === 'planned' ? '<span class="pill info">🧠 terencana</span>' : ''}
           </h3>
-          <div class="kv"><span>${quiz.num_questions} soal · setiap soal bernilai ${Math.round(100 / quiz.num_questions)} poin · maks 100</span>${
-            quiz.method === 'ReAct' && typeof quiz.groundedCount === 'number'
-              ? `<span>RAG: ${quiz.groundedCount} soal di-grounding ke materi PDF, ${quiz.num_questions - quiz.groundedCount} dari pengetahuan umum (di-blend)</span>`
-              : ''}</div>
+          <div class="kv"><span>${quiz.num_questions} soal · setiap soal bernilai ${Math.round(100 / quiz.num_questions)} poin · maks 100</span></div>
         </div></div>
-        ${reactTraceHtml(quiz)}
+        ${planTraceHtml(quiz)}
         ${items}
         <div class="row" style="margin-top:14px">
           <button class="btn" id="submitQuizBtn">📤 Kumpulkan Jawaban</button>
@@ -1024,37 +792,21 @@ async function startQuiz(topicId, topicName, ctx) {
 
 // Per-question source line: 📚 source badge (+ score) or 💡 general-knowledge,
 // plus a collapsible "lihat kutipan sumber" expander showing the grounding excerpt.
-function sourceLineHtml(q) {
-  const badge = q.grounded
-    ? `<span class="pill good" style="font-size:11px">📚 ${esc(q.source || 'PDF')}${q.similarity != null ? ` · skor ${q.similarity}` : ''}</span>`
-    : `<span class="pill muted" style="font-size:11px">💡 pengetahuan umum</span>`;
-  const excerpt = (q.grounded && q.excerpt)
-    ? `<details class="src-excerpt" style="margin-top:6px">
-         <summary>🔎 Lihat kutipan sumber${q.source ? ` · ${esc(q.source)}` : ''}</summary>
-         <div class="quote">${esc(q.excerpt)}</div>
-       </details>`
-    : '';
-  return `${badge}${excerpt}`;
-}
-
-// Collapsible ReAct reasoning trace + PDF sources for a generated quiz.
-function reactTraceHtml(quiz) {
+// Jejak perencanaan sub-konsep untuk kuis yang dibuat dalam mode terencana.
+function planTraceHtml(quiz) {
   const trace = quiz.trace || [];
-  const sources = quiz.sources || [];
-  if (!trace.length && !sources.length) return '';
-  const ACT = { search_knowledge: '🔎 search_knowledge', generate_quiz: '✅ generate_quiz', final_answer: '🏁 final_answer' };
-  const steps = trace.map((t, i) => `
-    <div class="trace-step">
-      <div class="act">Langkah ${i + 1} · ${esc(ACT[t.action] || t.action)}${t.action_input ? ` <span class="muted">(${esc(String(t.action_input).slice(0, 80))})</span>` : ''}</div>
-      ${t.thought ? `<div><span class="muted">💭 Thought:</span> ${esc(t.thought)}</div>` : ''}
-      ${t.observation ? `<div class="obs">👁 Observation:\n${esc(t.observation)}</div>` : ''}
-    </div>`).join('');
-  const srcPills = sources.map((s) => `<span class="pill muted" style="margin:2px">${esc(s.source)} · ${s.chunks} chunk</span>`).join(' ');
+  if (!trace.length) return '';
+  const subs = trace.find((t) => t.step === 'subtopics');
+  const thought = trace.find((t) => t.step === 'plan' && t.thought);
+  if (!subs && !thought) return '';
+  const items = subs && Array.isArray(subs.subtopics)
+    ? subs.subtopics.map((x, i) => `<li>${i + 1}. ${esc(x)}</li>`).join('')
+    : '';
   return `
     <details style="margin:4px 0 10px">
-      <summary class="muted" style="cursor:pointer">🧠 Jejak penalaran ReAct (${trace.length} langkah)${sources.length ? ` · sumber: ${sources.length} dokumen` : ''}</summary>
-      ${sources.length ? `<div style="margin:8px 0">${srcPills}</div>` : ''}
-      <div class="trace">${steps}</div>
+      <summary class="muted" style="cursor:pointer">🧠 Rencana sub-konsep${subs && subs.subtopics ? ` (${subs.subtopics.length})` : ''}</summary>
+      ${thought ? `<div class="muted" style="margin:8px 0">💭 ${esc(thought.thought)}</div>` : ''}
+      ${items ? `<ul style="margin:6px 0 0 4px;list-style:none;padding:0">${items}</ul>` : ''}
     </details>`;
 }
 
@@ -1097,7 +849,6 @@ async function submitQuiz() {
           return `<div style="color:${col}">${mark} ${esc(opt)}</div>`;
         }).join('')}</div>
         ${r.explanation ? `<div class="muted" style="margin-top:6px">💡 ${esc(r.explanation)}</div>` : ''}
-        <div style="margin-top:6px">${sourceLineHtml(r)}</div>
       </div>`).join('');
     ctx.playBox.innerHTML = `
       <div class="panel">

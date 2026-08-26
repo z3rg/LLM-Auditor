@@ -52,19 +52,12 @@ const routes = [
   'config',
   // Pengaturan
   'settings',
-  'settings/embed',
-  // Basis pengetahuan PDF
-  'pdf/documents',
-  'pdf/documents/[id]',
-  'pdf/import',
-  'pdf/search',
   // Analisis gap
   'gaps/employee',
   'gaps/division',
   // Fitur AI
   'ai/recommendation',
   'ai/quiz-topics',
-  'sql-agent',
   // Rekomendasi & acknowledgement
   'recommendations',
   'recommendations/[id]/acknowledge',

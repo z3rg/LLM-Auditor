@@ -3,20 +3,6 @@ node_modules/
 .npm-cache/
 .cache/
 
-# Python (skrip ingest scripts/ingest_legal_pdf.py) — virtualenv & bytecode
-.venv/
-__pycache__/
-
-# Database runtime. Berkas WAL/SHM bersifat sementara — jangan pernah dilacak.
-data/*
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-# Kecuali snapshot demo: sengaja dilacak agar repo bisa langsung dijalankan
-# lengkap dengan data kuis + indeks RAG. Lihat catatan di README.
-!data/auditor.db
-
 # Secrets & OS
 .env
 .DS_Store
@@ -33,3 +19,7 @@ npm-debug.log*
 # Tencent Cloud EdgeOne (ditambahkan `edgeone login`)
 .edgeone/*
 .tef_dist/*
+
+# Data Blob lokal (dev & uji)
+.blob-data/
+auditor-blob-*.json*

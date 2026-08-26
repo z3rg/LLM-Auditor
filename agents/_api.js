@@ -28,8 +28,8 @@ import { Readable } from 'node:stream';
 // Di-resolusi sebagai import relatif biasa oleh runtime agents.
 import apiRouter from '../lib/api.js';
 
-// Driver Neon TIDAK di-import di sini. lib/pg.js sudah me-require-nya secara
-// malas saat kueri pertama, dan paketnya dijamin ada di runtime lewat
+// SDK Blob TIDAK di-import di sini. lib/blob.js me-require-nya secara malas
+// saat operasi pertama, dan paketnya dijamin ada di runtime lewat
 // edgeone.json -> agents.externalNodeModules. Import di sini hanya akan
 // memindahkan kegagalan resolusi ke waktu muat modul, di mana pesannya hilang.
 
@@ -204,7 +204,7 @@ export async function handleApi(context) {
       timer = setTimeout(() => resolve(json(504, {
         error: `Permintaan tidak selesai dalam ${Math.round(WATCHDOG_MS / 1000)} detik.`,
         path: url.pathname,
-        hint: 'Cek DATABASE_URL (Neon) dan keterjangkauan jaringan dari agent.',
+        hint: 'Cek MAKERS_MODELS_KEY dan keterjangkauan EdgeOne Blob dari agent.',
       })), WATCHDOG_MS);
     });
 

@@ -1,5 +1,5 @@
 {
-  "//": "Deploy EdgeOne Makers. API dijalankan sebagai Agent Functions (agents/), bukan Cloud Functions: mode agent memuat berkas rute sebagai modul Node biasa dengan node_modules terpasang, sehingga graf modul lib/ tidak perlu di-bundle sendiri, dan batas eksekusinya 3600 detik (bukan 120).",
+  "//": "Deploy EdgeOne Makers. API dijalankan sebagai Agent Functions (agents/), bukan Cloud Functions: mode agent memuat berkas rute sebagai modul Node biasa dengan node_modules terpasang, sehingga graf modul lib/ tidak perlu di-bundle sendiri, SDK Blob dipasang platform, dan batas eksekusinya 3600 detik (bukan 120).",
   "installCommand": "npm install --omit=dev",
   "outputDirectory": "public",
   "nodeVersion": "20.18.0",
@@ -8,7 +8,7 @@
     "framework": "openai-sdk",
     "timeout": 300,
     "externalNodeModules": [
-      "@neondatabase/serverless"
+      "@edgeone/pages-blob"
     ]
   }
 }

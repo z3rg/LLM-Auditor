@@ -1,5 +1,14 @@
 # Dokumentasi Proyek — LLM Auditor
 
+> **Status: mendokumentasikan arsitektur sebelumnya.**
+> Laporan ini menggambarkan versi LLM Auditor yang memakai **agen ReAct + RAG** di atas
+> **Postgres (Neon) + pgvector**, dengan embedding Gemini dan fitur SQL Agent — termasuk hasil
+> pengukurannya. Aplikasi kini berjalan di **EdgeOne Blob** tanpa database SQL; RAG dan SQL
+> Agent sudah dibuang, dan soal kuis disusun DeepSeek dengan perencanaan sub-konsep.
+> Dokumen ini sengaja **tidak diperbarui** agar tetap menjadi catatan utuh atas pekerjaan dan
+> analisis tersebut. Untuk arsitektur yang berlaku sekarang, lihat `README.md` dan `DEVELOPER.md`.
+
+
 > Aplikasi analitik hasil kuis **IT Auditor** lintas-divisi, ditenagai **model bawaan EdgeOne Makers** (LLM) dan
 > **Google Gemini** (embedding RAG). Dokumen ini merangkum tujuan, arsitektur, alur kerja
 > **ReAct Agent**, cuplikan kode penting, hasil analisis, dan insight.
