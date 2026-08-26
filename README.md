@@ -237,7 +237,22 @@ DATABASE_URL='…' npm run db:migrate
 Konsol Makers → **Models → API Key** → buat & salin. Itu satu-satunya kunci yang dibutuhkan untuk
 fitur AI: gateway menyediakan model bawaan (`@makers/deepseek-v4-flash`) tanpa perlu akun vendor.
 
-### 3. Deploy
+### 3. Bangun artefak function
+
+```bash
+npm run build:function
+```
+
+Cloud function dideploy sebagai **satu berkas mandiri** hasil esbuild, dan artefaknya di-commit.
+Ini bukan kerumitan yang dicari-cari: bundler platform menyerah pada graf modul `lib/` dan
+meninggalkan import-nya sebagai `require` runtime, yang lalu gagal dengan
+`Cannot find module '../../lib/api.js'` di `/var/user/index.mjs`. Dengan mem-bundle sendiri,
+artefaknya tidak punya import relatif sama sekali dan bisa diuji lokal sebelum dikirim.
+
+> **Jalankan ulang setiap kali `lib/` atau `functions-src/` berubah.** Kalau lupa, deployment
+> masih memakai artefak lama dan perubahan Anda tidak akan terlihat.
+
+### 4. Deploy
 
 Lewat CLI (paling langsung):
 
@@ -258,7 +273,7 @@ sudah ada di `edgeone.json`, jadi biarkan terdeteksi otomatis:
 | Output directory | `public` | `outputDirectory` — situs statis tanpa build step |
 | Function timeout | `120` detik | `cloudFunctions.nodejs.maxDuration` (default 30 detik, maks 120) |
 
-### 4. Isi environment variable
+### 5. Isi environment variable
 
 Di **Project settings → Environment variables**, atau dari CLI (`edgeone makers env set KEY value`):
 
@@ -273,11 +288,12 @@ Di **Project settings → Environment variables**, atau dari CLI (`edgeone maker
 
 Perubahan env var hanya berlaku untuk deployment **berikutnya**, tidak mengubah yang sudah jalan.
 
-### 5. Verifikasi
+### 6. Verifikasi
 
 ```bash
 edgeone makers dev            # emulasi lokal di http://localhost:8088
-curl -s https://<project>.edgeone.app/api/config
+curl -s https://<project>.edgeone.dev/api/ping     # probe tanpa dependency
+curl -s https://<project>.edgeone.dev/api/config
 ```
 
 Balasan `/api/config` yang sehat memuat `"hasKey": true`, `"aiProvider": "EdgeOne Makers"`, dan
@@ -506,7 +522,9 @@ curl -b sid.txt -X POST http://localhost:3000/api/sql-agent \
 | Berkas | Peran |
 |--------|-------|
 | `server.js` | Entri **dev lokal**: HTTP server Node built-in + static files; memanggil router yang sama dengan produksi |
-| `cloud-functions/api/[[default]].js` | Entri **produksi**: adapter Fetch → req/res Node → `lib/api.js`, dengan watchdog agar tidak pernah menggantung |
+| `functions-src/api-entry.mjs` | **Sumber** cloud function: adapter Fetch → req/res Node → `lib/api.js`, dengan watchdog |
+| `cloud-functions/api/[[default]].js` | **Artefak** hasil `npm run build:function` — bundle mandiri, sengaja di-commit |
+| `scripts/build_function.sh` | esbuild: inline `lib/` + driver Neon jadi satu berkas tanpa import eksternal |
 | `lib/api.js` | Router JSON API bebas framework — seluruh rute `/api/*`, dipakai bersama oleh kedua entri |
 | `lib/pg.js` | Koneksi Postgres lewat driver HTTP Neon (`query/one/many/exec/scalar`) |
 | `db/schema.sql` | DDL Postgres: tabel, index, dan kelima view analitik gap |

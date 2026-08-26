@@ -14,7 +14,8 @@
     "docker:build": "docker build -f docker/Dockerfile -t llm-auditor .",
     "docker:run": "docker run --rm -p 3000:3000 --env-file .env llm-auditor",
     "docker:up": "docker compose -f docker/docker-compose.yml --env-file .env up --build -d",
-    "docker:down": "docker compose -f docker/docker-compose.yml down"
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "build:function": "bash scripts/build_function.sh"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0"
@@ -36,5 +37,8 @@
     "embeddings"
   ],
   "license": "MIT",
-  "//": "State aplikasi ada di Postgres (Neon) + pgvector — butuh DATABASE_URL. Fitur AI memakai Groq (GROQ_API_KEY); embedding RAG memakai Gemini gemini-embedding-001 (GEMINI_API_KEY). Skrip scripts/migrate_sqlite_to_pg.js memakai node:sqlite dan hanya jalan di Node >= 22.5 (lokal)."
+  "//": "State aplikasi ada di Postgres (Neon) + pgvector — butuh DATABASE_URL. Fitur AI memakai Groq (GROQ_API_KEY); embedding RAG memakai Gemini gemini-embedding-001 (GEMINI_API_KEY). Skrip scripts/migrate_sqlite_to_pg.js memakai node:sqlite dan hanya jalan di Node >= 22.5 (lokal).",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
 }

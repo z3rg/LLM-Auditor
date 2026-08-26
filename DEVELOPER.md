@@ -32,9 +32,10 @@ Dokumen ini untuk **pengembangan lanjutan**. Untuk cara pakai & deploy, lihat
 server.js              Entri DEV LOKAL: HTTP server + static files + warmup RAG
 cloud-functions/
   package.json         {"type":"module"} — menandai folder ini ESM, lib/ tetap CommonJS
-  api/[[default]].js   Entri PRODUKSI: adapter Fetch -> req/res Node -> lib/api.js
+  api/[[default]].js   ARTEFAK bundle (hasil npm run build:function) - di-commit
   api/ping.js          Probe tanpa import: menguji runtime function
-  api/diag.js          Probe resolusi modul + env yang terpasang
+functions-src/
+  api-entry.mjs        SUMBER cloud function: adapter Fetch -> req/res Node -> lib/api.js
 edgeone.json           Konfigurasi Makers: nodeVersion, outputDirectory, maxDuration 120s
 db/
   schema.sql           DDL Postgres: tabel, index, kelima view analitik gap
@@ -74,7 +75,7 @@ data/
 
 ```bash
 cp .env.example .env          # isi DATABASE_URL (Neon) + MAKERS_MODELS_KEY + GEMINI_API_KEY
-npm install                   # driver Neon
+npm install                   # driver Neon + esbuild (dev)
 npm run db:setup              # terapkan skema, isi data dummy, siapkan akun staf
 node server.js                # atau ./start.sh
 npm run seed                  # reset data dummy

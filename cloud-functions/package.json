@@ -1,7 +1,4 @@
 {
-  "//": "Dua peran. (1) \"type\": \"module\" menandai berkas .js di folder ini sebagai ESM — cloud function EdgeOne memakai sintaks ESM — sementara lib/ tetap CommonJS; resolusi Node menghormati package.json terdekat. (2) dependencies digandakan dari root karena builder EdgeOne memasang dependency dari package.json di direktori function; versinya harus tetap sama dengan root.",
-  "type": "module",
-  "dependencies": {
-    "@neondatabase/serverless": "^1.0.0"
-  }
+  "//": "Menandai berkas .js di folder ini sebagai ESM — artefak function memakai sintaks import. Tidak ada dependencies: cloud-functions/api/[[default]].js adalah bundle mandiri hasil `npm run build:function`, seluruh dependency sudah ter-inline dan yang tersisa hanya modul bawaan Node.",
+  "type": "module"
 }
