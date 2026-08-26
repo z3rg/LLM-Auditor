@@ -372,9 +372,9 @@ async function loadUsers() {
         </tbody>
       </table></div>`;
     box.querySelectorAll('select[data-role-for]').forEach((sel) =>
-      sel.addEventListener('change', () => updateUser(`/api/admin/users/${sel.dataset.roleFor}/role`, { role: sel.value })));
+      sel.addEventListener('change', () => updateUser('/api/admin/users/role', { id: Number(sel.dataset.roleFor), role: sel.value })));
     box.querySelectorAll('button[data-status-for]').forEach((btn) =>
-      btn.addEventListener('click', () => updateUser(`/api/admin/users/${btn.dataset.statusFor}/status`, { status: btn.dataset.next })));
+      btn.addEventListener('click', () => updateUser('/api/admin/users/status', { id: Number(btn.dataset.statusFor), status: btn.dataset.next })));
   } catch (e) {
     box.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
   }
@@ -691,7 +691,7 @@ async function loadAcks() {
       const input = area.querySelector('input'); const btn = area.querySelector('button');
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
-        try { await api(`/api/recommendations/${r.id}/acknowledge`, { method: 'POST', body: JSON.stringify({ ack_note: input.value }) }); loadAcks(); }
+        try { await api('/api/recommendations/acknowledge', { method: 'POST', body: JSON.stringify({ id: r.id, ack_note: input.value }) }); loadAcks(); }
         catch (e) { btn.disabled = false; btn.textContent = '✅ Acknowledge'; alert(e.message); }
       });
     } else {

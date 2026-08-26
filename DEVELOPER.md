@@ -179,6 +179,12 @@ Konsekuensi yang mahal ditemukan:
   sebagai `/api/configmjs`. Pemindai berkasnya *menerima* `.mjs`, jadi berkasnya terlihat tapi
   path-nya salah — kegagalan yang sunyi. Folder `agents/` memakai `.js` + `agents/package.json`
   bertanda `"type": "module"`.
+- **Segmen dinamis berupa DIREKTORI tidak berfungsi.** `agents/api/**/[id]/berkas.js` tidak
+  pernah didaftarkan platform: `/api/recommendations/999/acknowledge` menjawab 404 HTML dari
+  EdgeOne sementara rute statis di sebelahnya menjawab JSON. Sudah diuji langsung di
+  deployment. Kirim id lewat body pada rute statis (`/api/recommendations/acknowledge`).
+  Resolver CLI lokal memetakannya dengan benar, jadi simulasi lokal TIDAK menangkap ini —
+  hanya uji terhadap deployment yang menangkapnya.
 - Berkas berawalan `_` bukan rute.
 - Path yang juga menjadi awalan path lain harus ditulis `index.js` (generator mengurus ini).
 

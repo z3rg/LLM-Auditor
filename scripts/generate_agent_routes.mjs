@@ -12,9 +12,11 @@
  *   · 'config'                    -> agents/api/config.js
  *   · 'settings' + 'settings/*'   -> agents/api/settings/index.js (path yang
  *     juga menjadi awalan path lain tidak bisa jadi berkas DAN direktori)
- *   · '[id]'                      -> segmen dinamis; resolver EdgeOne
- *     menerjemahkannya jadi '/:id'. Nilainya tidak dipakai di sini karena
- *     lib/api.js membaca ulang path lengkapnya sendiri.
+ * JANGAN memakai segmen dinamis berupa DIREKTORI ('recommendations/[id]/
+ * acknowledge'). Sudah diuji di platform: path seperti
+ * /api/recommendations/999/acknowledge menjawab 404 HTML dari EdgeOne dan
+ * tidak pernah sampai ke function, sementara rute statis di sebelahnya
+ * menjawab JSON dengan normal. Kirim id lewat body pada rute statis.
  *
  * Ekstensi .js (BUKAN .mjs) disengaja: resolver rute EdgeOne memotong ekstensi
  * berkas dengan pola yang tidak selalu memuat 'mjs', sehingga berkas .mjs bisa
@@ -41,8 +43,10 @@ const routes = [
   'auth/password',
   // Administrasi pengguna
   'admin/users',
-  'admin/users/[id]/role',
-  'admin/users/[id]/status',
+  // Segmen dinamis berupa DIREKTORI tidak didaftarkan platform (lihat catatan
+  // di bawah), jadi id dikirim lewat body pada rute statis ini.
+  'admin/users/role',
+  'admin/users/status',
   // Data referensi & ringkasan
   'divisions',
   'topics',
@@ -60,7 +64,7 @@ const routes = [
   'ai/quiz-topics',
   // Rekomendasi & acknowledgement
   'recommendations',
-  'recommendations/[id]/acknowledge',
+  'recommendations/acknowledge',
   // Peserta & kuis
   'participant/curriculum',
   'quiz/generate',

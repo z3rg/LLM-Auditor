@@ -158,6 +158,11 @@ Tidak ada langkah bundle: mode agent memuat berkas rute sebagai modul Node biasa
 `node_modules` terpasang, jadi `import '../lib/api.js'` tetap import relatif dan dependency
 runtime cukup didaftarkan di `edgeone.json` → `agents.externalNodeModules`.
 
+> **Jangan memakai segmen dinamis berupa DIREKTORI** (`recommendations/[id]/acknowledge`).
+> Sudah diuji di platform: `/api/recommendations/999/acknowledge` menjawab **404 HTML dari
+> EdgeOne** dan tidak pernah sampai ke function, sementara rute statis di sebelahnya menjawab
+> JSON normal. Kirim id lewat **body** pada rute statis.
+
 > **Jangan memberi berkas di `agents/` ekstensi `.mjs`.** Resolver rute EdgeOne memotong
 > ekstensi dengan pola yang tidak memuat `mjs`, sehingga `config.mjs` terdaftar sebagai
 > `/api/configmjs` — berkasnya terlihat, path-nya diam-diam salah. Folder ini memakai `.js`

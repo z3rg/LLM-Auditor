@@ -141,13 +141,45 @@ async function waitForServer(child, ms = 20000) {
     const target = users.find((a) => a.email === 'peserta.uji@company.co.id');
     ok(!!target && target.active_sessions === 1, `sesi aktif peserta terhitung: ${target && target.active_sessions}`);
 
-    console.log('\nubah peran & status');
-    const promote = await admin.call(`/api/admin/users/${target.id}/role`, { method: 'POST', body: JSON.stringify({ role: 'auditor' }) });
+    console.log('\nubah peran & status (rute STATIS — bentuk yang dipakai produksi)');
+    // Sengaja memakai /api/admin/users/role, bukan /api/admin/users/<id>/role:
+    // segmen dinamis berupa direktori tidak didaftarkan EdgeOne, dan uji yang
+    // memakai bentuk lama akan lulus di lokal sambil produksi 404.
+    const promote = await admin.call('/api/admin/users/role', { method: 'POST', body: JSON.stringify({ id: target.id, role: 'auditor' }) });
     ok(promote.status === 200 && promote.json.user.role === 'auditor', 'peran dinaikkan jadi auditor');
-    const suspend = await admin.call(`/api/admin/users/${target.id}/status`, { method: 'POST', body: JSON.stringify({ status: 'suspended' }) });
+    const suspend = await admin.call('/api/admin/users/status', { method: 'POST', body: JSON.stringify({ id: target.id, status: 'suspended' }) });
     ok(suspend.status === 200, 'akun ditangguhkan');
     const afterSuspend = await peserta.call('/api/auth/me');
     ok(afterSuspend.status === 401, 'penangguhan langsung mencabut sesi', `status ${afterSuspend.status}`);
+
+    console.log('\nrekomendasi & acknowledge');
+    const recRes = await admin.call('/api/recommendations', {
+      method: 'POST',
+      body: JSON.stringify({
+        scope_type: 'division', scope_ref: 2, scope_label: 'IT',
+        title: 'Rekomendasi uji', recommendation: '## Isi rekomendasi uji',
+        recommended_topics: ['Network Security'], model: 'uji',
+      }),
+    });
+    ok(recRes.status === 201 && recRes.json.id, `rekomendasi dibuat (id ${recRes.json && recRes.json.id})`);
+    ok((recRes.json.recommendation || '').length > 0, 'isi rekomendasi tersimpan, tidak kosong');
+    const empty = await admin.call('/api/recommendations', {
+      method: 'POST',
+      body: JSON.stringify({ scope_type: 'division', scope_ref: 2, title: 'Kosong', recommendation: '   ' }),
+    });
+    ok(empty.status === 400, `rekomendasi tanpa isi ditolak (status ${empty.status})`);
+
+    const direktur = agent();
+    await direktur.call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: 'director@company.co.id', password: SEED_PASSWORD }) });
+    const notDirector = await admin.call('/api/recommendations/acknowledge', { method: 'POST', body: JSON.stringify({ id: recRes.json.id }) });
+    ok(notDirector.status === 403, 'hanya Direktur yang boleh acknowledge');
+    const ack = await direktur.call('/api/recommendations/acknowledge', {
+      method: 'POST', body: JSON.stringify({ id: recRes.json.id, ack_note: 'setuju' }),
+    });
+    ok(ack.status === 200 && ack.json.status === 'acknowledged', `acknowledge berhasil (${ack.json && ack.json.status})`);
+    ok(ack.json.ack_by === 'Direktur Utama' && ack.json.ack_note === 'setuju', 'nama & catatan direktur tercatat');
+    const missing = await direktur.call('/api/recommendations/acknowledge', { method: 'POST', body: JSON.stringify({ id: 999 }) });
+    ok(missing.status === 404, `id tidak dikenal -> 404 JSON (status ${missing.status})`);
 
     console.log('\nthrottle login');
     let blocked = 0;
