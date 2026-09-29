@@ -49,11 +49,11 @@ const reseed = process.argv.includes('--reseed');
   console.log(`  Topik      : ${topics.length}`);
   console.log(`  Peserta    : ${employees.length}`);
   if (boot.seeded.length) {
-    console.log(`\n  Akun staf disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
+    console.log(`\n  Akun bawaan disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
     for (const email of boot.seeded) console.log(`    · ${email}`);
     console.log('  Ganti kata sandi setelah masuk, atau set SEED_PASSWORD sebelum menjalankan ini.');
   } else {
-    console.log('  Akun staf   : kata sandi sudah pernah disetel (tidak diubah).');
+    console.log('  Akun bawaan : kata sandi sudah pernah disetel (tidak diubah).');
   }
   console.log('');
 })().catch((e) => { console.error('\n  Gagal:', e.message, '\n'); process.exit(1); });

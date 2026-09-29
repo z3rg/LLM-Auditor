@@ -224,7 +224,7 @@ lalu `<section class="tab hidden" id="tab-…">`. Muat datanya di `app.js` mengi
 | `EDGEONE_PROJECT_ID` + `EDGEONE_BLOB_TOKEN` | luar platform | Blob sungguhan lewat token |
 | `BLOB_STORE_NAME` | tidak | Default `auditor`; `[a-zA-Z0-9_-]{1,64}` |
 | `BLOB_CACHE_TTL_MS` | tidak | Default 15000 |
-| `SEED_PASSWORD` | tidak | Kata sandi awal akun staf; default `Auditor#2026` |
+| `SEED_PASSWORD` | tidak | Kata sandi awal akun staf & 32 peserta bawaan; default `Auditor#2026` |
 | `COOKIE_SECURE` | tidak | `1`/`0` memaksa atribut `Secure`; kosong = deteksi otomatis |
 | `PORT` | tidak | Default 3000 (dev lokal) |
 | `FUNCTION_WATCHDOG_MS` | tidak | Batas watchdog jembatan agent; default 280000 |

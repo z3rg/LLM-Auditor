@@ -96,7 +96,7 @@ npm run seed:reset    # HAPUS semua data aplikasi lalu isi ulang
 ```
 
 Seed membuat 8 divisi, 10 topik, 32 peserta beserta ~390 attempt kuis, dan tiga akun staf.
-Kata sandi awal akun staf diambil dari `SEED_PASSWORD` (default `Auditor#2026`).
+Kata sandi awal akun staf dan ke-32 peserta diambil dari `SEED_PASSWORD` (default `Auditor#2026`).
 
 ---
 
@@ -120,6 +120,10 @@ Masuk dengan salah satu akun bawaan (kata sandi `SEED_PASSWORD`):
 | `admin@company.co.id` | Super Admin |
 | `auditor@company.co.id` | IT Auditor |
 | `director@company.co.id` | Direktur |
+
+Ke-32 peserta yang namanya tampil di analitik juga bisa masuk sebagai **Peserta**
+dengan kata sandi yang sama. Email-nya dibentuk dari nama: huruf kecil, spasi diganti titik,
+ditambah `@company.co.id` — misalnya `andi.wijaya@company.co.id`, `oscar.tanuwijaya@company.co.id`.
 
 ### Uji regresi
 

@@ -105,6 +105,12 @@ async function waitForServer(child, ms = 20000) {
     const me = await admin.call('/api/auth/me');
     ok(me.status === 200 && me.json.user.email === 'admin@company.co.id', 'sesi bertahan antar-request');
 
+    console.log('\nmasuk sebagai peserta bawaan');
+    const seededEmp = agent();
+    const empLogin = await seededEmp.call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: 'andi.wijaya@company.co.id', password: SEED_PASSWORD }) });
+    ok(empLogin.status === 200 && empLogin.json.user.role === 'employee' && empLogin.json.user.name === 'Andi Wijaya',
+      `peserta bawaan bisa masuk (${empLogin.json && empLogin.json.user && empLogin.json.user.name})`, `status ${empLogin.status}`);
+
     console.log('\nanalitik');
     const ov = await admin.call('/api/overview');
     ok(ov.status === 200 && ov.json.totals.employees === 32, `overview: ${ov.json && ov.json.totals && ov.json.totals.employees} peserta`);
@@ -137,7 +143,7 @@ async function waitForServer(child, ms = 20000) {
     ok(forbidden.status === 403, 'peserta tidak bisa membaca daftar akun', `status ${forbidden.status}`);
     const accounts = await admin.call('/api/admin/users');
     const users = (accounts.json && accounts.json.users) || [];
-    ok(accounts.status === 200 && users.length >= 4, `super admin melihat ${users.length} akun`);
+    ok(accounts.status === 200 && users.length >= 36, `super admin melihat ${users.length} akun`);
     const target = users.find((a) => a.email === 'peserta.uji@company.co.id');
     ok(!!target && target.active_sessions === 1, `sesi aktif peserta terhitung: ${target && target.active_sessions}`);
 

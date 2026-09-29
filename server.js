@@ -69,12 +69,12 @@ const server = http.createServer((req, res) => {
     process.exit(1);
   }
 
-  // Beri kata sandi awal untuk akun staf bawaan (sekali saja, saat pertama jalan).
+  // Beri kata sandi awal untuk akun bawaan (staf + peserta) (sekali saja, saat pertama jalan).
   let boot = { seeded: [], seedPassword: null };
   try {
     boot = await auth.bootstrap();
   } catch (e) {
-    console.error(`\n  Gagal menyiapkan akun staf: ${e.message}\n`);
+    console.error(`\n  Gagal menyiapkan akun bawaan: ${e.message}\n`);
     process.exit(1);
   }
 
@@ -86,7 +86,7 @@ const server = http.createServer((req, res) => {
     console.log(`  LLM key loaded:       ${aiCfg.key ? 'yes' : `NO — set ${aiCfg.keyEnv} in .env`}`);
     console.log(`  Penyimpanan:          EdgeOne Blob (${local ? `lokal: ${local}` : 'remote'})`);
     if (boot.seeded.length) {
-      console.log(`\n  Akun staf disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
+      console.log(`\n  Akun bawaan disiapkan dengan kata sandi awal "${boot.seedPassword}":`);
       for (const email of boot.seeded) console.log(`    · ${email}`);
       console.log('  Ganti kata sandi setelah masuk (menu Pengaturan), atau set SEED_PASSWORD di .env.');
     }
