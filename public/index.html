@@ -109,6 +109,7 @@
       <a class="nav-item" data-tab="trend" data-roles="super_admin,auditor,director"><span class="ic">📈</span> Tren Skor</a>
       <a class="nav-item" data-tab="newquiz" data-roles="participant"><span class="ic">📋</span> Kuis Anda</a>
       <a class="nav-item" data-tab="acks" data-roles="super_admin,auditor,director"><span class="ic">📝</span> Acknowledgement</a>
+      <a class="nav-item" data-tab="legal" data-roles="super_admin,auditor"><span class="ic">📚</span> Dokumen Legal</a>
       <a class="nav-item" data-tab="settings" data-roles="super_admin"><span class="ic">⚙️</span> Pengaturan</a>
       <a class="nav-item" data-tab="account" data-roles="super_admin,auditor,director,participant"><span class="ic">🔑</span> Akun</a>
       <div class="nav-spacer"></div>
@@ -223,7 +224,60 @@
             <input type="checkbox" id="tglPlanned" />
             <span>Rencanakan sub-konsep sebelum menyusun soal <em>(disarankan)</em></span>
           </label>
+          <label class="row" style="gap:10px;cursor:pointer;margin-top:10px">
+            <input type="checkbox" id="tglLegal" />
+            <span>Susun soal berdasarkan <strong>dokumen legal</strong> yang diunggah <em>(butuh mode terencana)</em></span>
+          </label>
           <div id="settingsMsg"></div>
+        </div>
+      </section>
+
+      <!-- Dokumen legal: dasar penyusunan soal -->
+      <section class="tab hidden" id="tab-legal">
+        <div class="page-head"><div>
+          <h2>Dokumen Legal</h2>
+          <div class="desc">Unggah peraturan (POJK, kebijakan internal) yang harus dikuasai peserta. Pasal yang relevan dipakai DeepSeek saat merencanakan dan menyusun soal kuis.</div>
+        </div></div>
+        <div class="panel">
+          <div class="flow">
+            <span class="step">PDF dibaca di browser</span><span class="arrow">→</span>
+            <span class="step">Dipotong per pasal + vektor BM25</span><span class="arrow">→</span>
+            <span class="step">DeepSeek memberi kata kunci &amp; topik</span><span class="arrow">→</span>
+            <span class="step">Pasal relevan membentuk soal</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>⬆️ Unggah PDF</h3>
+          <form id="legalForm">
+            <div class="two-col" style="gap:10px;align-items:start">
+              <label class="fld">Judul dokumen
+                <input type="text" id="legalTitle" maxlength="160" placeholder="mis. POJK 11/2022 — Penyelenggaraan TI Bank Umum" required />
+              </label>
+              <label class="fld">Berkas PDF
+                <input type="file" id="legalFile" accept="application/pdf,.pdf" required />
+              </label>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn sm" type="submit" id="legalUploadBtn">Baca &amp; indeks</button>
+            </div>
+            <div id="legalMsg"></div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h3>📂 Dokumen terindeks</h3>
+          <div id="legalList"></div>
+        </div>
+
+        <div class="panel">
+          <h3>🔍 Uji pencarian per topik</h3>
+          <div class="muted" style="margin-bottom:10px">Lihat pasal mana yang akan dipakai saat soal untuk sebuah topik disusun.</div>
+          <div class="row" style="gap:10px">
+            <select id="legalTopic" style="min-width:240px"></select>
+            <button class="btn sm ghost" id="legalSearchBtn">Cari</button>
+          </div>
+          <div id="legalResults"></div>
         </div>
       </section>
 

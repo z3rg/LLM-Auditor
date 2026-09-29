@@ -187,6 +187,29 @@ async function waitForServer(child, ms = 20000) {
     const missing = await direktur.call('/api/recommendations/acknowledge', { method: 'POST', body: JSON.stringify({ id: 999 }) });
     ok(missing.status === 404, `id tidak dikenal -> 404 JSON (status ${missing.status})`);
 
+    console.log('\ndokumen legal');
+    const legalPages = [
+      { page: 1, text: 'PERATURAN OTORITAS JASA KEUANGAN\nTENTANG PENYELENGGARAAN TEKNOLOGI INFORMASI\nMenimbang bahwa penyelenggaraan teknologi informasi perlu diatur.' },
+      { page: 2, text: 'Pasal 1\nLembaga wajib memastikan ketersediaan jejak audit atas seluruh kegiatan penyelenggaraan sistem elektronik.\nJejak audit disimpan paling singkat 5 tahun dan dipantau secara berkala oleh fungsi audit intern.' },
+      { page: 3, text: 'Pasal 2\nLembaga wajib memiliki rencana pemulihan bencana dan pusat pemulihan bencana yang diuji paling sedikit satu kali dalam setahun untuk menjamin kelangsungan usaha.' },
+    ];
+    const upNo = await seededEmp.call('/api/legal/documents', { method: 'POST', body: JSON.stringify({ title: 'X', pages: legalPages }) });
+    ok(upNo.status === 403, `peserta tidak bisa mengunggah dokumen (status ${upNo.status})`);
+    const up = await admin.call('/api/legal/documents', { method: 'POST', body: JSON.stringify({ title: 'POJK Uji', filename: 'uji.pdf', pages: legalPages }) });
+    ok(up.status === 201 && up.json.document.chunkCount >= 1, `dokumen terindeks (${up.json && up.json.document && up.json.document.chunkCount} potongan)`, up.text.slice(0, 200));
+    const blank = await admin.call('/api/legal/documents', { method: 'POST', body: JSON.stringify({ title: 'Kosong', pages: [{ page: 1, text: '   ' }] }) });
+    ok(blank.status === 400, `PDF tanpa teks ditolak (status ${blank.status})`);
+    const docs = await admin.call('/api/legal/documents');
+    ok(docs.status === 200 && docs.json.documents.length === 1, 'daftar dokumen memuat unggahan');
+    const topicsList = (await admin.call('/api/topics')).json;
+    const logging = topicsList.find((t) => /Audit Logging/.test(t.name));
+    const hit = await admin.call('/api/legal/search', { method: 'POST', body: JSON.stringify({ topic_id: logging.id }) });
+    ok(hit.status === 200 && hit.json.results.some((r) => /Pasal 1/.test(r.citation || '')),
+      `pencarian topik menemukan pasal jejak audit (${hit.json && hit.json.results.map((r) => r.citation).join(' | ')})`);
+    const del = await admin.call('/api/legal/delete', { method: 'POST', body: JSON.stringify({ id: up.json.document.id }) });
+    const afterDel = await admin.call('/api/legal/documents');
+    ok(del.status === 200 && afterDel.json.documents.length === 0, 'dokumen terhapus');
+
     console.log('\nthrottle login');
     let blocked = 0;
     for (let i = 0; i < 10; i++) {

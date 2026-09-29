@@ -24,7 +24,7 @@
  * "type": "module" supaya .js tetap diurai sebagai ESM, sementara lib/ di luar
  * folder ini tetap CommonJS.
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,6 +69,11 @@ const routes = [
   'participant/curriculum',
   'quiz/generate',
   'quiz/submit',
+  // Dokumen legal (id lewat body — rute statis)
+  'legal/documents',
+  'legal/enrich',
+  'legal/delete',
+  'legal/search',
 ];
 
 /** Path yang juga menjadi awalan path lain harus ditulis sebagai index.mjs. */
@@ -81,7 +86,7 @@ function sourceFor(relativeTarget) {
   const depth = relativeTarget.split('/').length; // agents/api/<...>
   const bridge = `${'../'.repeat(depth)}_api.js`;
   return [
-    '// Dihasilkan oleh scripts/generate_agent_routes.mjs — jangan disunting tangan.',
+    `${HEADER} — jangan disunting tangan.`,
     `import { handleApi } from ${JSON.stringify(bridge)};`,
     '',
     'export async function onRequest(context) {',
@@ -93,9 +98,29 @@ function sourceFor(relativeTarget) {
   ].join('\n');
 }
 
-// Bangun ulang dari nol supaya endpoint yang dihapus dari daftar tidak
-// meninggalkan rute yatim yang masih terdeploy.
-await rm(apiDir, { recursive: true, force: true });
+const HEADER = '// Dihasilkan oleh scripts/generate_agent_routes.mjs';
+
+/**
+ * Hapus berkas HASIL GENERATE saja, supaya endpoint yang dihapus dari daftar
+ * tidak meninggalkan rute yatim yang masih terdeploy. Berkas tulisan tangan
+ * (api/ping.js — probe tanpa dependency) tidak bertanda HEADER dan dibiarkan;
+ * versi lama yang menghapus seluruh folder ikut menghapus probe itu.
+ */
+async function removeGenerated(dir) {
+  let entries;
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch (_) { return; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await removeGenerated(full);
+      await rmdir(full).catch(() => {}); // hanya berhasil bila kini kosong
+    } else if ((await readFile(full, 'utf8')).startsWith(HEADER)) {
+      await rm(full);
+    }
+  }
+}
+
+await removeGenerated(apiDir);
 await mkdir(apiDir, { recursive: true });
 
 for (const route of routes) {

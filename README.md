@@ -41,6 +41,7 @@ persetujuan **Super Admin → Direktur**.
 | 6 | **Kuis (Peserta Audit)** | Peserta melewati **10 topik audit berurutan**, masing-masing **10 soal pilihan ganda** yang dibuat DeepSeek → dijawab & dinilai (maks 100) → skor tercatat sehingga rata-rata & status gap ikut membaik. |
 | 7 | **Penyusunan soal terencana** | Sebelum menulis soal, model memecah topik jadi **10 sub-konsep berbeda**, lalu menyusun satu soal per sub-konsep. Cakupan jadi merata dibanding meminta 10 soal sekaligus. Bisa dimatikan di **Pengaturan**. |
 | 8 | **Akun & peran** | Registrasi mandiri (selalu jadi Peserta), sesi cookie HttpOnly, throttle login, dan pengelolaan peran/status oleh Super Admin. |
+| 9 | **Dokumen legal sebagai dasar soal** | Super Admin/Auditor mengunggah PDF peraturan (POJK, kebijakan internal). Pasal yang relevan ikut menentukan **sub-konsep** kuis dan menjadi **dasar tiap soal**; hasil kuis menampilkan kutipan pasalnya. Lihat [Dokumen legal](#dokumen-legal). |
 
 ---
 
@@ -128,12 +129,34 @@ ditambah `@company.co.id` — misalnya `andi.wijaya@company.co.id`, `oscar.tanuw
 ### Uji regresi
 
 ```bash
-npm run test:auth
+npm run test:auth    # server sungguhan + HTTP: auth, peran, analitik, unggah/cari dokumen legal
+npm run test:legal   # pemotongan, BM25, pengayaan & soal berbasis dokumen (gateway AI dipalsukan)
 ```
 
-Menjalankan server sungguhan di atas direktori Blob sementara lalu memanggil API lewat HTTP:
-data awal, login, sesi, analitik, pendaftaran, kontrol peran, throttle, dan logout. Tidak butuh
-kredensial apa pun dan tidak menyentuh data Anda.
+`test:auth` menjalankan server sungguhan di atas direktori Blob sementara lalu memanggil API lewat
+HTTP: data awal, login, sesi, analitik, pendaftaran, kontrol peran, dokumen legal, throttle, dan
+logout. `test:legal` memalsukan AI Gateway lewat `fetch`, jadi membuktikan logika aplikasi — bukan
+mutu soal dari model sungguhan. Keduanya tidak butuh kredensial dan tidak menyentuh data Anda.
+
+### Dokumen legal
+
+Menu **📚 Dokumen Legal** (Super Admin & Auditor):
+
+1. **Unggah PDF** — dibaca di browser dengan pdf.js; server hanya menerima teks per halaman.
+   PDF hasil pindaian (gambar) harus di-OCR dulu.
+2. **Indeks** — teks dipotong per **pasal** (bagian *Penjelasan* diberi label terpisah) lalu
+   dijadikan vektor **BM25** dengan stemming ringan Bahasa Indonesia, disimpan di Blob.
+3. **Pengayaan DeepSeek** — berjalan otomatis setelah unggah, 8 potongan per panggilan: tiap
+   potongan diberi kata kunci Indonesia/Inggris dan dipetakan ke topik kuis. Bila terputus,
+   klik **Lanjutkan**.
+4. **Kuis** — pada mode terencana, pasal yang paling relevan dengan topik membentuk rencana
+   sub-konsep; tiap sub-konsep dipasangkan dengan satu kutipan, dan soalnya harus dapat
+   dibuktikan dari kutipan itu. Topik tanpa pasal yang relevan tetap memakai pengetahuan umum.
+
+**Kenapa bukan embedding neural:** AI Gateway Makers tidak punya endpoint `/v1/embeddings`
+(dijawab *Invalid request path*). Pengayaan DeepSeek itulah yang menjembatani nama topik
+berbahasa Inggris dengan teks POJK berbahasa Indonesia. Fitur ini bisa dimatikan di
+**Pengaturan**. Tiga POJK di `docs/regulasi/` bisa dipakai sebagai contoh unggahan.
 
 ---
 
@@ -364,7 +387,10 @@ Seluruh endpoint mengembalikan JSON dan (kecuali yang ditandai publik) menuntut 
 | POST | `/api/recommendations/:id/acknowledge` | direktur | Acknowledge |
 | GET | `/api/participant/curriculum` | sesi | Kurikulum 10 topik peserta |
 | POST | `/api/quiz/generate` · `/api/quiz/submit` | sesi | Buat & kumpulkan kuis |
-| GET/POST | `/api/settings` | super admin | Toggle penyusunan terencana |
+| GET/POST | `/api/settings` | super admin | Toggle penyusunan terencana & dasar dokumen legal |
+| GET/POST | `/api/legal/documents` | staf · SA/auditor | Daftar / unggah dokumen (teks per halaman) |
+| POST | `/api/legal/enrich` · `/api/legal/delete` | SA/auditor | Perkaya 8 potongan berikutnya / hapus (`{id}`) |
+| POST | `/api/legal/search` | staf | Pasal relevan untuk `{topic_id}` |
 | GET | `/api/admin/users` | super admin | Daftar akun |
 | POST | `/api/admin/users/:id/role` · `/status` | super admin | Ubah peran / status |
 
@@ -391,7 +417,8 @@ curl -s -b ck.txt localhost:3000/api/overview
 | `lib/blob_local.js` | Backend berkas lokal dengan antarmuka sama — untuk dev & uji tanpa kredensial |
 | `lib/db.js` | Lapisan data: seed, analitik gap, akun, sesi, kuis — seluruhnya di atas `lib/blob.js` |
 | `lib/auth.js` | Autentikasi: scrypt, sesi + cookie HttpOnly, throttle login, bootstrap akun staf |
-| `lib/ai.js` | Wrapper Chat Completions (DeepSeek via AI Gateway Makers) + rekomendasi + generator kuis |
+| `lib/ai.js` | Wrapper Chat Completions (DeepSeek via AI Gateway Makers) + rekomendasi + generator kuis + pengayaan dokumen |
+| `lib/legal.js` | Dokumen legal: pemotongan per pasal, vektor BM25, pencarian per topik & per sub-konsep |
 | `edgeone.json` | Konfigurasi Makers: versi Node, output statis, blok `agents` |
 
 ### Kenapa Blob, dan apa konsekuensinya
@@ -418,8 +445,9 @@ menyimpan cache berumur pendek dalam proses (`BLOB_CACHE_TTL_MS`, default 15 det
 
 - **SQL Agent** — fiturnya menyusun SQL lalu mengeksekusinya. Tanpa mesin kueri tidak ada yang
   bisa dieksekusi.
-- **RAG / PDF importer** — butuh pencarian vektor (pgvector) dan endpoint embeddings; Blob tidak
-  punya yang pertama, AI Gateway Makers tidak punya yang kedua.
+- **RAG / PDF importer lama** — butuh pencarian vektor (pgvector) dan endpoint embeddings; Blob
+  tidak punya yang pertama, AI Gateway Makers tidak punya yang kedua. Sejak 2026-09 diganti
+  [Dokumen legal](#dokumen-legal): BM25 lokal yang diperkaya DeepSeek.
 - **Docker & deployment VM** — target deploy tunggal kini EdgeOne Makers.
 
 ---

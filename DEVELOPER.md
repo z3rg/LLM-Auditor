@@ -5,7 +5,8 @@ lihat `README.md`.
 
 > Catatan riwayat: aplikasi ini pernah berjalan di atas SQLite, lalu Postgres (Neon) + pgvector.
 > Versi sekarang menyimpan seluruh state di **EdgeOne Blob**, dan fitur yang bergantung pada
-> mesin kueri (SQL Agent) serta pencarian vektor (RAG/PDF importer) sudah dibuang. `dokumentasi.md`
+> mesin kueri (SQL Agent) serta pencarian vektor (RAG/PDF importer) sudah dibuang. Dasar soal dari
+> PDF legal kembali lewat `lib/legal.js` (BM25 lokal + pengayaan DeepSeek, tanpa embeddings). `dokumentasi.md`
 > mendokumentasikan arsitektur ReAct + RAG yang lama dan **tidak lagi menggambarkan kode ini**.
 
 ---
@@ -113,6 +114,8 @@ itu yang menanggung beban kebenaran.
 | `login-attempts/<hash>.json` | Penghitung throttle |
 | `recommendations/<id>.json` · `quiz-sessions/<id>.json` | Satu objek per entitas |
 | `settings/<key>.json` · `meta/seed.json` | Konfigurasi & penanda seed |
+| `legal-docs/<id>.json` | Metadata dokumen legal |
+| `legal-chunks/<id>.json` | SEMUA potongan satu dokumen: teks, `tf` BM25, kata kunci & topik hasil pengayaan |
 
 ### Tiga aturan yang tidak boleh dilanggar
 

@@ -3,13 +3,10 @@
 Tiga POJK di folder ini adalah **berkas asli** yang dulu di-*ingest* sebagai basis
 pengetahuan RAG.
 
-> **Tidak lagi dipakai oleh aplikasi.** Fitur RAG dibuang saat aplikasi pindah ke
-> EdgeOne Blob: Blob adalah object store tanpa pencarian vektor, dan AI Gateway
-> Makers tidak menyediakan endpoint embeddings. Soal kuis kini disusun DeepSeek
-> dari pengetahuan umum IT audit, dengan perencanaan sub-konsep lebih dulu.
-
-Berkasnya disimpan di sini sebagai rujukan bagi penyusun soal dan auditor —
-bukan sebagai sumber data yang dibaca program.
+> **Tidak dibaca otomatis.** Program tidak memuat folder ini. Untuk menjadikannya
+> dasar soal kuis, unggah lewat menu **📚 Dokumen Legal** di aplikasi — PDF dibaca
+> di browser, dipotong per pasal, diindeks BM25, lalu diperkaya DeepSeek.
+> Lihat bagian *Dokumen legal* di README utama.
 
 | Berkas | Halaman |
 |--------|---------|

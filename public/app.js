@@ -307,6 +307,7 @@ $$('.nav-item[data-tab]').forEach((n) => n.addEventListener('click', () => {
   if (n.dataset.tab === 'newquiz') loadNewQuiz();
   if (n.dataset.tab === 'settings') loadSettings();
   if (n.dataset.tab === 'account') loadAccount();
+  if (n.dataset.tab === 'legal') loadLegal();
 }));
 
 // ---------------------------------------------------------------------------
@@ -710,6 +711,7 @@ async function loadSettings() {
   try {
     const s = await api('/api/settings');
     const t = $('#tglPlanned'); if (t) t.checked = !!s.quizPlanned;
+    const l = $('#tglLegal'); if (l) l.checked = !!s.legalGrounding;
   } catch (_) {}
 }
 
@@ -725,6 +727,206 @@ async function saveQuizSetting(key, value) {
 (function initSettingsUI() {
   const t = $('#tglPlanned');
   if (t) t.addEventListener('change', () => saveQuizSetting('quizPlanned', t.checked));
+  const l = $('#tglLegal');
+  if (l) l.addEventListener('change', () => saveQuizSetting('legalGrounding', l.checked));
+})();
+
+// ---------------------------------------------------------------------------
+// Dokumen legal — PDF dibaca di browser (pdf.js), server menerima teks saja
+// ---------------------------------------------------------------------------
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsReady = null;
+function loadPdfJs() {
+  if (!pdfjsReady) {
+    pdfjsReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `${PDFJS}pdf.min.js`;
+      s.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.js`;
+        resolve(window.pdfjsLib);
+      };
+      s.onerror = () => { pdfjsReady = null; reject(new Error('Gagal memuat pembaca PDF (pdf.js).')); };
+      document.head.appendChild(s);
+    });
+  }
+  return pdfjsReady;
+}
+
+/**
+ * Teks per halaman. Baris baru disisipkan saat posisi vertikal berubah —
+ * pemotong di server mengenali "Pasal N" hanya bila berdiri di barisnya sendiri.
+ */
+async function extractPdfPages(file, onProgress) {
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const pages = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const content = await (await pdf.getPage(n)).getTextContent();
+    // Spasi hanya disisipkan bila ada JARAK horizontal antar-potongan: pdf.js
+    // sering memecah satu kata/angka jadi beberapa item, dan spasi buta
+    // mengubah "Pasal 15" menjadi "Pasal 1 5" — label pasalnya pun hilang.
+    let text = '';
+    let lastY = null;
+    let lastEnd = null;
+    const newline = () => { if (text && !text.endsWith('\n')) text += '\n'; };
+    for (const item of content.items) {
+      const [, , , , x, y] = item.transform || [];
+      if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 2) newline();
+      else if (lastEnd !== null && x !== undefined && x - lastEnd > 1 && !/\s$/.test(text) && !/^\s/.test(item.str)) text += ' ';
+      text += item.str;
+      if (item.hasEOL) newline();
+      if (y !== undefined) lastY = y;
+      lastEnd = x !== undefined ? x + (item.width || 0) : null;
+    }
+    pages.push({ page: n, text });
+    onProgress && onProgress(n, pdf.numPages);
+  }
+  return pages;
+}
+
+async function loadLegal() {
+  const sel = $('#legalTopic');
+  if (sel && !sel.options.length) {
+    try {
+      const topics = await api('/api/topics');
+      sel.innerHTML = topics.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    } catch (_) {}
+  }
+  const box = $('#legalList');
+  box.innerHTML = '<span class="spinner"></span> Memuat…';
+  try {
+    const { documents } = await api('/api/legal/documents');
+    if (!documents.length) {
+      box.innerHTML = '<div class="muted">Belum ada dokumen. Tanpa dokumen, soal disusun dari pengetahuan IT audit umum.</div>';
+      return;
+    }
+    box.innerHTML = `<div class="scroll-x"><table>
+      <thead><tr><th>Judul</th><th>Halaman</th><th>Potongan</th><th>Pengayaan AI</th><th>Diunggah</th><th></th></tr></thead>
+      <tbody>${documents.map((d) => {
+        const done = d.enrichedCount >= d.chunkCount;
+        const status = done
+          ? '<span class="pill good">Selesai</span>'
+          : `<span class="pill warn">${d.enrichedCount}/${d.chunkCount}</span>
+             <button class="btn sm ghost" data-enrich="${d.id}">Lanjutkan</button>`;
+        return `<tr>
+          <td>${esc(d.title)}<div class="muted" style="font-size:12px">${esc(d.filename || '')}</div></td>
+          <td>${d.pages}</td>
+          <td>${d.chunkCount}</td>
+          <td id="enrich-${d.id}">${status}</td>
+          <td><span class="muted">${esc(d.uploadedBy || '-')}<br>${esc(String(d.uploadedAt || '').slice(0, 10))}</span></td>
+          <td><button class="btn sm ghost" data-del="${d.id}" data-title="${esc(d.title)}">Hapus</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>
+      <div class="muted" style="margin-top:8px;font-size:12px">Pengayaan AI opsional tetapi disarankan: tanpa itu pencarian hanya mengandalkan kecocokan kata.</div>`;
+    box.querySelectorAll('button[data-enrich]').forEach((b) =>
+      b.addEventListener('click', () => enrichLegal(Number(b.dataset.enrich))));
+    box.querySelectorAll('button[data-del]').forEach((b) =>
+      b.addEventListener('click', () => deleteLegal(Number(b.dataset.del), b.dataset.title, b)));
+  } catch (e) {
+    box.innerHTML = `<div class="notice err">Gagal memuat: ${esc(e.message)}</div>`;
+  }
+}
+
+/** Jalankan pengayaan per kelompok sampai habis; tiap panggilan satu kelompok potongan. */
+async function enrichLegal(id) {
+  const cell = () => $(`#enrich-${id}`);
+  for (;;) {
+    if (cell()) cell().innerHTML = '<span class="spinner"></span> DeepSeek memberi label…';
+    let out;
+    try {
+      out = await api('/api/legal/enrich', { method: 'POST', body: JSON.stringify({ id }) });
+    } catch (e) {
+      if (cell()) cell().innerHTML = `<span class="pill bad">Gagal</span> <button class="btn sm ghost" data-retry="${id}">Coba lagi</button>
+        <div class="muted" style="font-size:12px">${esc(e.message)}</div>`;
+      const r = cell() && cell().querySelector('button[data-retry]');
+      if (r) r.addEventListener('click', () => enrichLegal(id));
+      return;
+    }
+    const d = out.doc;
+    if (cell()) cell().innerHTML = `<span class="pill warn">${d.enrichedCount}/${d.chunkCount}</span>`;
+    if (!out.remaining) { loadLegal(); return; }
+  }
+}
+
+// Tanpa confirm(): dialog modal browser memblokir otomasi. Klik kedua mengonfirmasi.
+async function deleteLegal(id, title, btn) {
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Yakin hapus?';
+    btn.classList.remove('ghost');
+    setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = 'Hapus'; btn.classList.add('ghost'); } }, 4000);
+    return;
+  }
+  try {
+    await api('/api/legal/delete', { method: 'POST', body: JSON.stringify({ id }) });
+    loadLegal();
+  } catch (e) {
+    $('#legalMsg').innerHTML = `<div class="notice err">Gagal menghapus "${esc(title)}": ${esc(e.message)}</div>`;
+  }
+}
+
+async function searchLegal() {
+  const box = $('#legalResults');
+  const topicId = Number($('#legalTopic').value);
+  if (!topicId) return;
+  box.innerHTML = '<div style="margin-top:10px"><span class="spinner"></span> Mencari…</div>';
+  try {
+    const out = await api('/api/legal/search', { method: 'POST', body: JSON.stringify({ topic_id: topicId }) });
+    if (!out.results.length) {
+      box.innerHTML = `<div class="notice" style="margin-top:10px">Tidak ada pasal yang cukup relevan untuk <strong>${esc(out.topic)}</strong>. Soal topik ini disusun dari pengetahuan umum.</div>`;
+      return;
+    }
+    box.innerHTML = out.results.map((r) => `
+      <div class="card" style="margin-top:10px">
+        <div class="row" style="justify-content:space-between;gap:8px">
+          <strong>📚 ${esc(r.citation)}</strong><span class="pill muted">skor ${r.score}</span>
+        </div>
+        <div class="muted" style="margin-top:6px;white-space:pre-line;font-size:13px">${esc(r.text)}</div>
+      </div>`).join('');
+  } catch (e) {
+    box.innerHTML = `<div class="notice err" style="margin-top:10px">${esc(e.message)}</div>`;
+  }
+}
+
+(function initLegalUI() {
+  const form = $('#legalForm');
+  if (!form) return;
+  $('#legalFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    const t = $('#legalTitle');
+    if (f && !t.value.trim()) t.value = f.name.replace(/\.pdf$/i, '');
+  });
+  $('#legalSearchBtn').addEventListener('click', searchLegal);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('#legalMsg');
+    const btn = $('#legalUploadBtn');
+    const file = $('#legalFile').files[0];
+    const title = $('#legalTitle').value.trim();
+    if (!file || !title) return;
+    btn.disabled = true;
+    try {
+      msg.innerHTML = '<div class="notice"><span class="spinner"></span> Membaca PDF…</div>';
+      const pages = await extractPdfPages(file, (n, total) => {
+        msg.innerHTML = `<div class="notice"><span class="spinner"></span> Membaca halaman ${n}/${total}…</div>`;
+      });
+      if (!pages.some((pg) => pg.text.trim())) {
+        throw new Error('PDF tidak memuat teks — kemungkinan hasil pindaian. Jalankan OCR lebih dulu.');
+      }
+      msg.innerHTML = '<div class="notice"><span class="spinner"></span> Memotong per pasal & membangun indeks…</div>';
+      const { document: doc } = await api('/api/legal/documents', {
+        method: 'POST', body: JSON.stringify({ title, filename: file.name, pages }),
+      });
+      msg.innerHTML = `<div class="notice ok">Terindeks: <strong>${esc(doc.title)}</strong> — ${doc.pages} halaman, ${doc.chunkCount} potongan. DeepSeek kini memberi label topik…</div>`;
+      form.reset();
+      await loadLegal();
+      await enrichLegal(doc.id);
+    } catch (err) {
+      msg.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 })();
 
 // ---------------------------------------------------------------------------
@@ -807,6 +1009,7 @@ async function startQuiz(topicId, topicName, ctx) {
           <h3 style="margin:0">Kuis: ${esc(quiz.topic)}
             <span class="pill muted">${esc(quiz.model || state.config.model)}</span>
             ${quiz.method === 'planned' ? '<span class="pill info">🧠 terencana</span>' : ''}
+            ${quiz.grounded_count ? `<span class="pill good">📚 ${quiz.grounded_count} soal berdasar dokumen legal</span>` : ''}
           </h3>
           <div class="kv"><span>${quiz.num_questions} soal · setiap soal bernilai ${Math.round(100 / quiz.num_questions)} poin · maks 100</span></div>
         </div></div>
@@ -825,8 +1028,6 @@ async function startQuiz(topicId, topicName, ctx) {
   }
 }
 
-// Per-question source line: 📚 source badge (+ score) or 💡 general-knowledge,
-// plus a collapsible "lihat kutipan sumber" expander showing the grounding excerpt.
 // Jejak perencanaan sub-konsep untuk kuis yang dibuat dalam mode terencana.
 function planTraceHtml(quiz) {
   const trace = quiz.trace || [];
@@ -884,6 +1085,11 @@ async function submitQuiz() {
           return `<div style="color:${col}">${mark} ${esc(opt)}</div>`;
         }).join('')}</div>
         ${r.explanation ? `<div class="muted" style="margin-top:6px">💡 ${esc(r.explanation)}</div>` : ''}
+        ${r.grounded && r.source ? `
+          <details style="margin-top:6px">
+            <summary class="muted" style="cursor:pointer">📚 ${esc(r.source)} — lihat kutipan</summary>
+            <div class="muted" style="margin-top:6px;white-space:pre-line;font-size:13px">${esc(r.excerpt || '')}</div>
+          </details>` : ''}
       </div>`).join('');
     ctx.playBox.innerHTML = `
       <div class="panel">

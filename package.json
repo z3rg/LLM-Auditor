@@ -12,6 +12,7 @@
     "backup": "node scripts/blob_backup.js dump",
     "restore": "node scripts/blob_backup.js restore",
     "test:auth": "node scripts/test_auth.js",
+    "test:legal": "node scripts/test_legal.js",
     "agents:routes": "node scripts/generate_agent_routes.mjs"
   },
   "dependencies": {
