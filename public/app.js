@@ -986,7 +986,7 @@ async function loadNewQuiz() {
 async function startQuiz(topicId, topicName, ctx) {
   const playBox = ctx.playBox;
   state.activeQuizCtx = ctx;
-  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> <strong>DeepSeek</strong> sedang merencanakan sub-konsep lalu menyusun soal untuk <strong>${esc(topicName)}</strong>…</div>`;
+  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> <strong>DeepSeek</strong> sedang merencanakan sub-konsep lalu menyusun soal untuk <strong>${esc(topicName)}</strong>… <span class="muted">(bisa 1–3 menit)</span></div>`;
   playBox.scrollIntoView({ block: 'start' });
   try {
     const quiz = await api('/api/quiz/generate', {

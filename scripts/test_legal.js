@@ -35,6 +35,7 @@ function ok(cond, label, detail) {
 
 // --- gateway palsu ----------------------------------------------------------
 const calls = [];
+let genHook = null; // (userPrompt) -> Response untuk memalsukan kegagalan penyusunan soal
 let enrichReply = null; // fungsi (userPrompt) -> string konten, atau {content, finish}
 function reply(content, finish = 'stop') {
   return new Response(JSON.stringify({
@@ -58,7 +59,9 @@ global.fetch = async (url, init) => {
     ] }));
   }
   // Penyusunan soal: satu soal per blok.
-  const blocks = (user.match(/=== BLOK \d+/g) || []).length;
+  if (genHook) { const r = genHook(user); if (r) return r; }
+  // Prompt ber-blok (terencana) atau "Buat N soal" (cadangan generateQuiz).
+  const blocks = (user.match(/=== BLOK \d+/g) || []).length || Number((user.match(/^Buat (\d+) soal/) || [])[1] || 0);
   return reply(JSON.stringify({ questions: Array.from({ length: blocks }, (_, i) => ({
     question: `Soal ${i + 1}?`, options: ['a', 'b', 'c', 'd'], answer_index: 0, explanation: 'uji', block: i + 1,
   })) }));
@@ -145,6 +148,35 @@ const PAGES = [
     ok(g.length >= 1 && g.every((q) => q.source && q.source.startsWith('POJK Uji') && q.excerpt),
       `soal berbasis dokumen membawa sumber (${g.map((q) => q.source).join(' | ')})`);
     ok(quiz.trace.some((t) => t.step === 'grounded'), 'jejak mencatat jumlah soal berbasis dokumen');
+
+    console.log('\nanggaran waktu & penyusunan paralel');
+    calls.length = 0;
+    const ten = await ai.generateQuizPlanned(logging.name, logging.area, 10, grounding, { deadline: Date.now() + 60_000 });
+    const genCalls = calls.filter((c) => /=== BLOK/.test(c.user));
+    ok(genCalls.length === 2 && genCalls.every((c) => (c.user.match(/=== BLOK \d+/g) || []).length === 5),
+      `10 soal disusun lewat 2 panggilan paralel @5 blok (${genCalls.map((c) => (c.user.match(/=== BLOK \d+/g) || []).length).join('+')})`);
+    const planned10 = ten.trace.find((t) => t.step === 'subtopics').subtopics;
+    ok(ten.questions.length === 10 && ten.questions.every((q, i) => q.subconcept === planned10[i]),
+      'nomor blok kelompok kedua dipetakan ke sub-konsep 6..10, bukan 1..5');
+
+    calls.length = 0;
+    let seen = 0;
+    genHook = () => (++seen === 2 ? new Response('gateway error', { status: 500 }) : null);
+    const oneFailed = await ai.generateQuizPlanned(logging.name, logging.area, 10, grounding, { deadline: Date.now() + 60_000 });
+    genHook = null;
+    ok(oneFailed.questions.length === 10 && oneFailed.trace.some((t) => t.step === 'generate' && t.error) &&
+       oneFailed.trace.some((t) => t.step === 'fallback' && t.reason),
+      'satu kelompok gagal -> dicatat di jejak, kekurangan diisi soal cadangan');
+
+    let late = null;
+    try { await ai.generateQuizPlanned(logging.name, logging.area, 10, grounding, { deadline: Date.now() + 1_500 }); } catch (e) { late = e; }
+    ok(late && /Waktu habis/.test(late.message), `tenggat hampir habis -> berhenti dengan sebab jelas (${late && late.message.slice(0, 60)})`);
+
+    genHook = () => new Response('timeout', { status: 504 });
+    let bothFailed = null;
+    try { await ai.generateQuizPlanned(logging.name, logging.area, 10, null, { deadline: Date.now() + 30_000 }); } catch (e) { bothFailed = e; }
+    genHook = null;
+    ok(bothFailed && /504/.test(bothFailed.message), `semua kelompok gagal & tak ada waktu cadangan -> galat model diteruskan (${bothFailed && bothFailed.message.slice(0, 50)})`);
 
     console.log('\ntanpa dokumen');
     calls.length = 0;
