@@ -146,9 +146,11 @@ Menu **📚 Dokumen Legal** (Super Admin & Auditor):
    PDF hasil pindaian (gambar) harus di-OCR dulu.
 2. **Indeks** — teks dipotong per **pasal** (bagian *Penjelasan* diberi label terpisah) lalu
    dijadikan vektor **BM25** dengan stemming ringan Bahasa Indonesia, disimpan di Blob.
-3. **Pengayaan DeepSeek** — berjalan otomatis setelah unggah, 8 potongan per panggilan: tiap
+3. **Pengayaan DeepSeek** — berjalan otomatis setelah unggah, 4 potongan per panggilan: tiap
    potongan diberi kata kunci Indonesia/Inggris dan dipetakan ke topik kuis. Bila terputus,
-   klik **Lanjutkan**.
+   klik **Lanjutkan**. Jawaban model yang terpotong (`finish_reason=length`) tidak dibuang —
+   label yang sudah utuh disimpan, sisanya diulang. Model khusus pengayaan bisa dipilih lewat
+   env `MAKERS_ENRICH_MODEL` (mis. `@makers/deepseek-v4-flash`).
 4. **Kuis** — pada mode terencana, pasal yang paling relevan dengan topik membentuk rencana
    sub-konsep; tiap sub-konsep dipasangkan dengan satu kutipan, dan soalnya harus dapat
    dibuktikan dari kutipan itu. Topik tanpa pasal yang relevan tetap memakai pengetahuan umum.
@@ -389,7 +391,7 @@ Seluruh endpoint mengembalikan JSON dan (kecuali yang ditandai publik) menuntut 
 | POST | `/api/quiz/generate` · `/api/quiz/submit` | sesi | Buat & kumpulkan kuis |
 | GET/POST | `/api/settings` | super admin | Toggle penyusunan terencana & dasar dokumen legal |
 | GET/POST | `/api/legal/documents` | staf · SA/auditor | Daftar / unggah dokumen (teks per halaman) |
-| POST | `/api/legal/enrich` · `/api/legal/delete` | SA/auditor | Perkaya 8 potongan berikutnya / hapus (`{id}`) |
+| POST | `/api/legal/enrich` · `/api/legal/delete` | SA/auditor | Perkaya ≤4 potongan berikutnya / hapus (`{id}`) |
 | POST | `/api/legal/search` | staf | Pasal relevan untuk `{topic_id}` |
 | GET | `/api/admin/users` | super admin | Daftar akun |
 | POST | `/api/admin/users/:id/role` · `/status` | super admin | Ubah peran / status |

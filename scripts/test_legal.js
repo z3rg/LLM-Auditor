@@ -35,10 +35,10 @@ function ok(cond, label, detail) {
 
 // --- gateway palsu ----------------------------------------------------------
 const calls = [];
-let enrichReply = null; // fungsi (userPrompt) -> string konten
-function reply(content) {
+let enrichReply = null; // fungsi (userPrompt) -> string konten, atau {content, finish}
+function reply(content, finish = 'stop') {
   return new Response(JSON.stringify({
-    model: '@makers/uji', choices: [{ message: { content }, finish_reason: 'stop' }],
+    model: '@makers/uji', choices: [{ message: { content }, finish_reason: finish }],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 global.fetch = async (url, init) => {
@@ -46,7 +46,10 @@ global.fetch = async (url, init) => {
   const system = body.messages[0].content;
   const user = body.messages[1].content;
   calls.push({ system, user });
-  if (/analis regulasi/.test(system)) return reply(enrichReply(user));
+  if (/analis regulasi/.test(system)) {
+    const r = enrichReply(user);
+    return typeof r === 'string' ? reply(r) : reply(r.content, r.finish);
+  }
   if (/MERENCANAKAN/.test(system)) {
     return reply(JSON.stringify({ thought: 'uji', subtopics: [
       { subconcept: 'Retensi jejak audit' },
@@ -92,11 +95,25 @@ const PAGES = [
     ok(bcpHits.length > 0 && /Pasal 2/.test(bcpHits[0].pasal || ''), `topik BCP -> ${bcpHits[0] && legal.citation(bcpHits[0])}`);
 
     console.log('\npengayaan DeepSeek');
-    enrichReply = () => '{"chunks": [ {"i": 0, "topics": [1, 2' ; // terpotong
-    let threw = false;
-    try { await legal.enrichNext(doc.id, topics, ai.enrichLegalChunks); } catch (_) { threw = true; }
+    // Terpotong sebelum label pertama selesai — juga saat dicoba ulang dengan satu potongan.
+    let enrichCalls = 0;
+    enrichReply = () => { enrichCalls++; return { content: '{"chunks": [ {"i": 0, "topics": [1, 2', finish: 'length' }; };
+    let threw = null;
+    try { await legal.enrichNext(doc.id, topics, ai.enrichLegalChunks); } catch (e) { threw = e; }
     const untouched = await legal.getChunks(doc.id);
-    ok(threw && untouched.every((c) => !c.enriched), 'jawaban terpotong -> galat, tidak ada potongan yang ditandai selesai');
+    ok(threw && /finish_reason=length/.test(threw.message) && untouched.every((c) => !c.enriched),
+      `terpotong tanpa label -> galat jelas, tidak ada yang ditandai selesai (${threw && threw.message})`);
+    ok(enrichCalls === 2, `dicoba ulang sekali dengan satu potongan (${enrichCalls} panggilan)`);
+
+    // Terpotong SETELAH satu label utuh: label itu disimpan, sisanya menunggu.
+    enrichReply = (user) => {
+      const first = Number(user.match(/### POTONGAN (\d+)/)[1]);
+      return { content: `{"chunks":[{"i":${first},"topics":[${bcp.id}],"keywords":["uji"]},{"i":${first + 1},"topics":[`, finish: 'length' };
+    };
+    const partial = await legal.enrichNext(doc.id, topics, ai.enrichLegalChunks);
+    const afterPartial = await legal.getChunks(doc.id);
+    ok(partial.processed === 1 && afterPartial.filter((c) => c.enriched).length === 1 && partial.remaining === afterPartial.length - 1,
+      `jawaban terpotong sebagian: 1 label utuh disimpan, ${partial.remaining} menunggu`);
 
     // Tandai SEMUA potongan dengan topik IAM + kata kunci khusus: pencarian
     // IAM yang tadinya lemah harus menemukan dokumen ini karena labelnya.
@@ -108,7 +125,8 @@ const PAGES = [
     const out = await legal.enrichNext(doc.id, topics, ai.enrichLegalChunks);
     ok(out.remaining === 0 && out.doc.enrichedCount === out.doc.chunkCount, `pengayaan selesai (${out.doc.enrichedCount}/${out.doc.chunkCount})`);
     const enriched = await legal.getChunks(doc.id);
-    ok(enriched.every((c) => c.topics.length === 1 && c.topics[0] === iam.id), 'id topik tak dikenal (999) dibuang');
+    ok(enriched.filter((c) => c.topics[0] === bcp.id).length === 1, 'label dari jawaban terpotong tidak ditimpa');
+    ok(enriched.filter((c) => c.topics[0] !== bcp.id).every((c) => c.topics.length === 1 && c.topics[0] === iam.id), 'id topik tak dikenal (999) dibuang');
     const after = await legal.searchTopic(iam);
     ok(after.length > before.length, `label topik memengaruhi pencarian IAM (${before.length} -> ${after.length} hasil)`);
 
