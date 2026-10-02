@@ -50,6 +50,7 @@ scripts/
   seed_blob.js         Isi data awal (npm run seed / seed:reset)
   blob_backup.js       Dump & restore seluruh store (npm run backup / restore)
   test_auth.js         Uji regresi end-to-end (npm run test:auth)
+  test_i18n.js         Uji kamus ID/EN + bahasa soal di prompt (npm run test:i18n)
   generate_agent_routes.mjs  Daftar endpoint + generator berkas rute
 public/                Frontend statis: index.html, app.js, styles.css, auth.css
   i18n.js              Kamus bahasa antarmuka ID/EN + t(); dimuat sebelum app.js

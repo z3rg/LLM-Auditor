@@ -13,6 +13,7 @@
     "restore": "node scripts/blob_backup.js restore",
     "test:auth": "node scripts/test_auth.js",
     "test:legal": "node scripts/test_legal.js",
+    "test:i18n": "node scripts/test_i18n.js",
     "agents:routes": "node scripts/generate_agent_routes.mjs"
   },
   "dependencies": {
