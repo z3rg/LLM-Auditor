@@ -52,6 +52,7 @@ scripts/
   test_auth.js         Uji regresi end-to-end (npm run test:auth)
   generate_agent_routes.mjs  Daftar endpoint + generator berkas rute
 public/                Frontend statis: index.html, app.js, styles.css, auth.css
+  i18n.js              Kamus bahasa antarmuka ID/EN + t(); dimuat sebelum app.js
 ```
 
 ---
@@ -280,3 +281,19 @@ masalahnya ada di graf modul `lib/` atau dependency runtime — bukan di routing
   Simpan ringkasan per divisi yang diperbarui saat submit, dengan penulis tunggal per kunci.
 - **Kuis adaptif**: pilih sub-konsep berdasarkan soal yang sebelumnya dijawab salah.
 - **Riwayat rekomendasi**: simpan versi sebelumnya agar perubahan saran bisa dilacak.
+
+---
+
+## Bahasa (Indonesia / English)
+
+- **Antarmuka**: teks statis di `index.html` ditandai `data-i18n` / `data-i18n-html` /
+  `data-i18n-placeholder`; teks dinamis di `app.js` memakai `t('kunci', { var })`. Seluruh kamus
+  ada di `public/i18n.js` — tambahkan kunci di **kedua** bahasa. Kunci yang hilang di `en` jatuh
+  ke `id`.
+- **Soal kuis**: peserta memilih bahasa soal (bawaan: ikuti antarmuka). Klien mengirim
+  `lang: 'id' | 'en'` ke `/api/quiz/generate` (juga ke `/api/ai/recommendation` dan
+  `/api/ai/quiz-topics`, mengikuti bahasa antarmuka). `lib/ai.js` menambahkan aturan bahasa
+  keluaran di akhir prompt (`langRule`); nilai lain jatuh ke Bahasa Indonesia.
+- Pilihan bahasa disimpan per browser di `localStorage` (`llm-auditor-lang`,
+  `llm-auditor-quiz-lang`). Pesan galat dari server masih berbahasa Indonesia.
+

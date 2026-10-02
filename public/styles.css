@@ -171,3 +171,17 @@ label.fld { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; 
   color: var(--muted); white-space: pre-wrap; font-size: 12px; line-height: 1.5;
   max-height: 200px; overflow: auto;
 }
+
+/* ---------- Pilihan bahasa (ID / EN) ---------- */
+.lang-switch {
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px;
+  background: var(--bg-2); border: 1px solid var(--border);
+}
+.lang-switch button {
+  border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: 12px;
+  letter-spacing: .04em; padding: 4px 10px; border-radius: 6px;
+}
+.lang-switch button:hover { color: var(--text); }
+.lang-switch button.is-active { background: var(--brand); color: #fff; }
+.side-lang { margin-top: 10px; align-self: flex-start; }
+.quiz-lang-fld { max-width: 280px; }

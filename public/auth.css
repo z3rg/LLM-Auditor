@@ -327,3 +327,7 @@
 @media (prefers-reduced-motion: reduce) {
   #auth *, #auth *::before, #auth *::after { animation: none !important; transition: none !important; }
 }
+
+/* Pilihan bahasa di layar masuk (warna mengikuti palet #auth) */
+#auth .auth-lang { align-self: flex-end; margin-bottom: 22px; background: var(--paper); border-color: var(--rule); }
+#auth .auth-lang button.is-active { background: var(--accent); }

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LLM Auditor — IT Audit Quiz Analytics</title>
+  <script src="/i18n.js"></script>
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/auth.css" />
 </head>
@@ -14,14 +15,14 @@
 
       <!-- Kertas kerja: register kontrol yang hidup mengikuti formulir -->
       <section class="paper">
-        <div class="paper-ref"><span>KKA</span><span class="dot"></span><span>AKSES SISTEM</span><span class="dot"></span><span id="paperYear">2026</span></div>
+        <div class="paper-ref"><span data-i18n="paper.ref1">KKA</span><span class="dot"></span><span data-i18n="paper.ref2">AKSES SISTEM</span><span class="dot"></span><span id="paperYear">2026</span></div>
         <h1 class="wordmark">LLM Auditor</h1>
-        <p class="paper-lead">Analitik kuis audit TI: gap pengetahuan per divisi, rekomendasi yang disusun AI, dan acknowledgement direktur.</p>
+        <p class="paper-lead" data-i18n="paper.lead">Analitik kuis audit TI: gap pengetahuan per divisi, rekomendasi yang disusun AI, dan acknowledgement direktur.</p>
 
         <!-- Hanya terisi pada mode Daftar; kosong saat Masuk. -->
         <div class="register hidden" id="paperRegister">
           <div class="register-head">
-            <span class="reg-title" id="registerTitle">Kontrol pendaftaran</span>
+            <span class="reg-title" id="registerTitle" data-i18n="reg.title">Kontrol pendaftaran</span>
             <span class="reg-count" id="registerCount"></span>
           </div>
           <ol class="reg-rows" id="registerRows"></ol>
@@ -34,64 +35,65 @@
             <span class="stamp-line2" id="stampLine2">RBAC · sesi 7 hari</span>
           </div>
           <dl class="paper-meta">
-            <div><dt>Ambang gap</dt><dd>70 / 100</dd></div>
-            <div><dt>Topik audit</dt><dd>10 berurutan</dd></div>
-            <div><dt>Soal per topik</dt><dd>10</dd></div>
+            <div><dt data-i18n="paper.metaGap">Ambang gap</dt><dd>70 / 100</dd></div>
+            <div><dt data-i18n="paper.metaTopics">Topik audit</dt><dd data-i18n="paper.metaTopicsVal">10 berurutan</dd></div>
+            <div><dt data-i18n="paper.metaQ">Soal per topik</dt><dd>10</dd></div>
           </dl>
         </div>
       </section>
 
       <!-- Formulir -->
       <section class="form-col">
-        <div class="mode-tabs" role="tablist" aria-label="Masuk atau daftar">
-          <button type="button" class="mode-tab is-active" id="tabLogin" data-mode="login" role="tab" aria-selected="true">Masuk</button>
-          <button type="button" class="mode-tab" id="tabRegister" data-mode="register" role="tab" aria-selected="false">Daftar</button>
+        <div class="lang-switch auth-lang" role="group" data-i18n-aria-label="lang.switch" aria-label="Bahasa"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+        <div class="mode-tabs" role="tablist" aria-label="Masuk atau daftar" data-i18n-aria-label="auth.tabsAria">
+          <button type="button" class="mode-tab is-active" id="tabLogin" data-mode="login" role="tab" aria-selected="true" data-i18n="auth.login">Masuk</button>
+          <button type="button" class="mode-tab" id="tabRegister" data-mode="register" role="tab" aria-selected="false" data-i18n="auth.register">Daftar</button>
           <span class="mode-underline" id="modeUnderline"></span>
         </div>
 
         <!-- Masuk -->
         <form class="auth-form" id="loginForm" novalidate>
-          <p class="form-intro">Gunakan email kantor dan kata sandi akun Anda.</p>
-          <label class="afld" for="loginEmail">Email
+          <p class="form-intro" data-i18n="auth.loginIntro">Gunakan email kantor dan kata sandi akun Anda.</p>
+          <label class="afld" for="loginEmail"><span data-i18n="auth.email">Email</span>
             <input type="email" id="loginEmail" name="email" autocomplete="email" placeholder="nama@company.co.id" required />
           </label>
-          <label class="afld" for="loginPassword">Kata sandi
+          <label class="afld" for="loginPassword"><span data-i18n="auth.password">Kata sandi</span>
             <span class="pw-wrap">
               <input type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="••••••••" required />
-              <button type="button" class="pw-toggle" data-target="loginPassword">Lihat</button>
+              <button type="button" class="pw-toggle" data-target="loginPassword" data-i18n="auth.show">Lihat</button>
             </span>
           </label>
           <div class="form-msg" id="loginMsg" role="alert" aria-live="polite"></div>
-          <button type="submit" class="auth-btn" id="loginSubmit">Masuk</button>
-          <p class="form-switch">Belum punya akun? <button type="button" class="linkish" data-goto="register">Daftar sebagai peserta audit</button></p>
+          <button type="submit" class="auth-btn" id="loginSubmit" data-i18n="auth.login">Masuk</button>
+          <p class="form-switch"><span data-i18n="auth.noAccount">Belum punya akun?</span> <button type="button" class="linkish" data-goto="register" data-i18n="auth.registerAs">Daftar sebagai peserta audit</button></p>
         </form>
 
         <!-- Daftar -->
         <form class="auth-form hidden" id="registerForm" novalidate>
-          <p class="form-intro">Akun baru terdaftar sebagai <strong>Peserta Audit</strong>. Akses tambahan diberikan administrator bila diperlukan.</p>
-          <label class="afld" for="regName">Nama lengkap
-            <input type="text" id="regName" name="name" autocomplete="name" placeholder="Nama sesuai data kepegawaian" required />
+          <p class="form-intro" data-i18n-html="auth.registerIntro">Akun baru terdaftar sebagai <strong>Peserta Audit</strong>. Akses tambahan diberikan administrator bila diperlukan.</p>
+          <label class="afld" for="regName"><span data-i18n="auth.fullName">Nama lengkap</span>
+            <input type="text" id="regName" name="name" autocomplete="name" placeholder="Nama sesuai data kepegawaian" data-i18n-placeholder="auth.fullNamePh" required />
           </label>
-          <label class="afld" for="regEmail">Email kantor
+          <label class="afld" for="regEmail"><span data-i18n="auth.workEmail">Email kantor</span>
             <input type="email" id="regEmail" name="email" autocomplete="email" placeholder="nama@company.co.id" required />
           </label>
-          <label class="afld" for="regDivision">Divisi
-            <select id="regDivision" name="division_id" required><option value="">Memuat divisi…</option></select>
+          <label class="afld" for="regDivision"><span data-i18n="auth.division">Divisi</span>
+            <select id="regDivision" name="division_id" required><option value="" data-i18n="auth.divLoading">Memuat divisi…</option></select>
           </label>
           <div class="afld-pair">
-            <label class="afld" for="regPassword">Kata sandi
+            <label class="afld" for="regPassword"><span data-i18n="auth.password">Kata sandi</span>
               <span class="pw-wrap">
                 <input type="password" id="regPassword" name="password" autocomplete="new-password" placeholder="••••••••" required />
-                <button type="button" class="pw-toggle" data-target="regPassword">Lihat</button>
+                <button type="button" class="pw-toggle" data-target="regPassword" data-i18n="auth.show">Lihat</button>
               </span>
             </label>
-            <label class="afld" for="regConfirm">Ulangi kata sandi
+            <label class="afld" for="regConfirm"><span data-i18n="auth.confirm">Ulangi kata sandi</span>
               <input type="password" id="regConfirm" name="confirm" autocomplete="new-password" placeholder="••••••••" required />
             </label>
           </div>
           <div class="form-msg" id="registerMsg" role="alert" aria-live="polite"></div>
-          <button type="submit" class="auth-btn" id="registerSubmit">Buat akun</button>
-          <p class="form-switch">Sudah punya akun? <button type="button" class="linkish" data-goto="login">Masuk</button></p>
+          <button type="submit" class="auth-btn" id="registerSubmit" data-i18n="auth.create">Buat akun</button>
+          <p class="form-switch"><span data-i18n="auth.haveAccount">Sudah punya akun?</span> <button type="button" class="linkish" data-goto="login" data-i18n="auth.login">Masuk</button></p>
         </form>
       </section>
     </div>
@@ -104,54 +106,55 @@
         <div class="logo">A</div>
         <h1>LLM Auditor</h1>
       </div>
-      <a class="nav-item" data-tab="overview" data-roles="super_admin,auditor,director"><span class="ic">📊</span> Overview</a>
-      <a class="nav-item" data-tab="gaps" data-roles="super_admin,auditor,director"><span class="ic">🧠</span> Knowledge Gaps</a>
-      <a class="nav-item" data-tab="trend" data-roles="super_admin,auditor,director"><span class="ic">📈</span> Tren Skor</a>
-      <a class="nav-item" data-tab="newquiz" data-roles="participant"><span class="ic">📋</span> Kuis Anda</a>
-      <a class="nav-item" data-tab="acks" data-roles="super_admin,auditor,director"><span class="ic">📝</span> Acknowledgement</a>
-      <a class="nav-item" data-tab="legal" data-roles="super_admin,auditor"><span class="ic">📚</span> Dokumen Legal</a>
-      <a class="nav-item" data-tab="settings" data-roles="super_admin"><span class="ic">⚙️</span> Pengaturan</a>
-      <a class="nav-item" data-tab="account" data-roles="super_admin,auditor,director,participant"><span class="ic">🔑</span> Akun</a>
+      <a class="nav-item" data-tab="overview" data-roles="super_admin,auditor,director"><span class="ic">📊</span> <span data-i18n="nav.overview">Overview</span></a>
+      <a class="nav-item" data-tab="gaps" data-roles="super_admin,auditor,director"><span class="ic">🧠</span> <span data-i18n="nav.gaps">Knowledge Gaps</span></a>
+      <a class="nav-item" data-tab="trend" data-roles="super_admin,auditor,director"><span class="ic">📈</span> <span data-i18n="nav.trend">Tren Skor</span></a>
+      <a class="nav-item" data-tab="newquiz" data-roles="participant"><span class="ic">📋</span> <span data-i18n="nav.quiz">Kuis Anda</span></a>
+      <a class="nav-item" data-tab="acks" data-roles="super_admin,auditor,director"><span class="ic">📝</span> <span data-i18n="nav.acks">Acknowledgement</span></a>
+      <a class="nav-item" data-tab="legal" data-roles="super_admin,auditor"><span class="ic">📚</span> <span data-i18n="nav.legal">Dokumen Legal</span></a>
+      <a class="nav-item" data-tab="settings" data-roles="super_admin"><span class="ic">⚙️</span> <span data-i18n="nav.settings">Pengaturan</span></a>
+      <a class="nav-item" data-tab="account" data-roles="super_admin,auditor,director,participant"><span class="ic">🔑</span> <span data-i18n="nav.account">Akun</span></a>
       <div class="nav-spacer"></div>
       <div class="role-badge">
         <span id="roleIcon">🛡️</span>
         <div><div class="who" id="roleName">—</div><div class="sub" id="modelName">—</div></div>
       </div>
-      <button class="btn ghost sm" id="logoutBtn" style="margin-top:8px">Keluar</button>
+      <div class="lang-switch side-lang" role="group" data-i18n-aria-label="lang.switch" aria-label="Bahasa"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+      <button class="btn ghost sm" id="logoutBtn" style="margin-top:8px" data-i18n="nav.logout">Keluar</button>
     </aside>
 
     <main class="main">
       <!-- Overview -->
       <section class="tab" id="tab-overview">
         <div class="page-head"><div>
-          <h2>Overview</h2>
-          <div class="desc">Ringkasan hasil kuis IT Auditor lintas divisi.</div>
+          <h2 data-i18n="ov.title">Overview</h2>
+          <div class="desc" data-i18n="ov.desc">Ringkasan hasil kuis IT Auditor lintas divisi.</div>
         </div></div>
         <div class="cards" id="statCards"></div>
         <div class="two-col">
-          <div class="panel"><h3>Skor Rata-rata per Divisi</h3><div id="divBars"></div></div>
-          <div class="panel"><h3>Skor Rata-rata per Topik</h3><div id="topicBars"></div></div>
+          <div class="panel"><h3 data-i18n="ov.byDiv">Skor Rata-rata per Divisi</h3><div id="divBars"></div></div>
+          <div class="panel"><h3 data-i18n="ov.byTopic">Skor Rata-rata per Topik</h3><div id="topicBars"></div></div>
         </div>
       </section>
 
       <!-- Knowledge Gaps -->
       <section class="tab hidden" id="tab-gaps">
         <div class="page-head"><div>
-          <h2>Knowledge Gaps</h2>
-          <div class="desc">Identifikasi gap pengetahuan, lalu hasilkan rekomendasi AI &amp; topik kuis.</div>
+          <h2 data-i18n="gaps.title">Knowledge Gaps</h2>
+          <div class="desc" data-i18n-html="gaps.desc">Identifikasi gap pengetahuan, lalu hasilkan rekomendasi AI &amp; topik kuis.</div>
         </div></div>
         <div class="panel">
           <div class="toolbar">
-            <label class="fld">Tinjau berdasarkan
+            <label class="fld"><span data-i18n="gaps.scope">Tinjau berdasarkan</span>
               <select id="scopeType">
-                <option value="employee">Karyawan</option>
-                <option value="division">Divisi</option>
+                <option value="employee" data-i18n="gaps.employee">Karyawan</option>
+                <option value="division" data-i18n="gaps.division">Divisi</option>
               </select>
             </label>
-            <label class="fld">Pilih
+            <label class="fld"><span data-i18n="common.pick">Pilih</span>
               <select id="scopeRef" style="min-width:240px"></select>
             </label>
-            <button class="btn sm" id="loadGaps">Tampilkan Gap</button>
+            <button class="btn sm" id="loadGaps" data-i18n="gaps.show">Tampilkan Gap</button>
           </div>
         </div>
         <div id="gapResult"></div>
@@ -160,27 +163,27 @@
       <!-- Tren Skor -->
       <section class="tab hidden" id="tab-trend">
         <div class="page-head"><div>
-          <h2>Tren Skor per Waktu</h2>
-          <div class="desc">Rata-rata skor kuis per bulan, dengan garis ambang gap sebagai acuan.</div>
+          <h2 data-i18n="trend.title">Tren Skor per Waktu</h2>
+          <div class="desc" data-i18n="trend.desc">Rata-rata skor kuis per bulan, dengan garis ambang gap sebagai acuan.</div>
         </div></div>
         <div class="panel">
           <div class="toolbar">
-            <label class="fld">Bandingkan
+            <label class="fld"><span data-i18n="trend.compare">Bandingkan</span>
               <select id="trendMode">
-                <option value="overall">Keseluruhan</option>
-                <option value="division">Per Divisi</option>
-                <option value="topic">Per Topik</option>
+                <option value="overall" data-i18n="trend.overall">Keseluruhan</option>
+                <option value="division" data-i18n="trend.perDiv">Per Divisi</option>
+                <option value="topic" data-i18n="trend.perTopic">Per Topik</option>
               </select>
             </label>
-            <label class="fld" id="trendPickWrap" style="display:none">Pilih
+            <label class="fld" id="trendPickWrap" style="display:none"><span data-i18n="common.pick">Pilih</span>
               <select id="trendPick" style="min-width:240px"></select>
             </label>
-            <label class="fld">Rentang waktu
+            <label class="fld"><span data-i18n="trend.range">Rentang waktu</span>
               <select id="trendRange">
-                <option value="3">3 bulan terakhir</option>
-                <option value="6">6 bulan terakhir</option>
-                <option value="12">12 bulan terakhir</option>
-                <option value="all" selected>Semua</option>
+                <option value="3" data-i18n="trend.r3">3 bulan terakhir</option>
+                <option value="6" data-i18n="trend.r6">6 bulan terakhir</option>
+                <option value="12" data-i18n="trend.r12">12 bulan terakhir</option>
+                <option value="all" selected data-i18n="trend.rAll">Semua</option>
               </select>
             </label>
           </div>
@@ -192,15 +195,22 @@
       <!-- Kuis Anda (Peserta Audit) — kurikulum lengkap 10 topik berurutan -->
       <section class="tab hidden" id="tab-newquiz">
         <div class="page-head"><div>
-          <h2>Kuis Anda</h2>
-          <div class="desc">Setiap peserta melewati <strong>10 topik audit berurutan</strong>, masing-masing <strong>10 soal</strong> yang dibuat DeepSeek; berlaku untuk peserta baru maupun yang sudah pernah mengerjakan.</div>
+          <h2 data-i18n="quiz.title">Kuis Anda</h2>
+          <div class="desc" data-i18n-html="quiz.desc">Setiap peserta melewati <strong>10 topik audit berurutan</strong>, masing-masing <strong>10 soal</strong> yang dibuat DeepSeek; berlaku untuk peserta baru maupun yang sudah pernah mengerjakan.</div>
         </div></div>
         <div class="panel">
           <div class="flow">
-            <span class="step">DeepSeek (10 soal/topik)</span><span class="arrow">→</span>
-            <span class="step">Kerjakan &amp; nilai</span><span class="arrow">→</span>
-            <span class="step">Skor tercatat</span>
+            <span class="step" data-i18n="quiz.flow1">DeepSeek (10 soal/topik)</span><span class="arrow">→</span>
+            <span class="step" data-i18n="quiz.flow2">Kerjakan &amp; nilai</span><span class="arrow">→</span>
+            <span class="step" data-i18n="quiz.flow3">Skor tercatat</span>
           </div>
+          <label class="fld quiz-lang-fld" style="margin-top:12px"><span data-i18n="lang.quiz">Bahasa soal kuis</span>
+            <select class="quiz-lang-select">
+              <option value="auto" data-i18n="lang.followUi">Ikuti bahasa antarmuka</option>
+              <option value="id">Bahasa Indonesia</option>
+              <option value="en">English</option>
+            </select>
+          </label>
         </div>
         <div id="newQuizGapBox"></div>
         <div id="newQuizPlayBox"></div>
@@ -209,24 +219,24 @@
       <!-- Pengaturan: cara kuis disusun -->
       <section class="tab hidden" id="tab-settings">
         <div class="page-head"><div>
-          <h2>Pengaturan</h2>
-          <div class="desc">Atur cara soal kuis disusun oleh model.</div>
+          <h2 data-i18n="set.title">Pengaturan</h2>
+          <div class="desc" data-i18n="set.desc">Atur cara soal kuis disusun oleh model.</div>
         </div></div>
 
         <div class="panel">
-          <h3>🧠 Penyusunan Soal</h3>
-          <div class="muted" style="margin-bottom:10px">
+          <h3 data-i18n="set.compose">🧠 Penyusunan Soal</h3>
+          <div class="muted" style="margin-bottom:10px" data-i18n-html="set.composeDesc">
             Mode <strong>terencana</strong> meminta model memecah topik menjadi sepuluh sub-konsep
             berbeda lebih dulu, lalu menyusun satu soal untuk tiap sub-konsep. Hasilnya lebih
             merata daripada meminta sepuluh soal sekaligus, dengan biaya satu panggilan tambahan.
           </div>
           <label class="row" style="gap:10px;cursor:pointer">
             <input type="checkbox" id="tglPlanned" />
-            <span>Rencanakan sub-konsep sebelum menyusun soal <em>(disarankan)</em></span>
+            <span data-i18n-html="set.planned">Rencanakan sub-konsep sebelum menyusun soal <em>(disarankan)</em></span>
           </label>
           <label class="row" style="gap:10px;cursor:pointer;margin-top:10px">
             <input type="checkbox" id="tglLegal" />
-            <span>Susun soal berdasarkan <strong>dokumen legal</strong> yang diunggah <em>(butuh mode terencana)</em></span>
+            <span data-i18n-html="set.legal">Susun soal berdasarkan <strong>dokumen legal</strong> yang diunggah <em>(butuh mode terencana)</em></span>
           </label>
           <div id="settingsMsg"></div>
         </div>
@@ -235,47 +245,47 @@
       <!-- Dokumen legal: dasar penyusunan soal -->
       <section class="tab hidden" id="tab-legal">
         <div class="page-head"><div>
-          <h2>Dokumen Legal</h2>
-          <div class="desc">Unggah peraturan (POJK, kebijakan internal) yang harus dikuasai peserta. Pasal yang relevan dipakai DeepSeek saat merencanakan dan menyusun soal kuis.</div>
+          <h2 data-i18n="legal.title">Dokumen Legal</h2>
+          <div class="desc" data-i18n="legal.desc">Unggah peraturan (POJK, kebijakan internal) yang harus dikuasai peserta. Pasal yang relevan dipakai DeepSeek saat merencanakan dan menyusun soal kuis.</div>
         </div></div>
         <div class="panel">
           <div class="flow">
-            <span class="step">PDF dibaca di browser</span><span class="arrow">→</span>
-            <span class="step">Dipotong per pasal + vektor BM25</span><span class="arrow">→</span>
-            <span class="step">DeepSeek memberi kata kunci &amp; topik</span><span class="arrow">→</span>
-            <span class="step">Pasal relevan membentuk soal</span>
+            <span class="step" data-i18n="legal.flow1">PDF dibaca di browser</span><span class="arrow">→</span>
+            <span class="step" data-i18n="legal.flow2">Dipotong per pasal + vektor BM25</span><span class="arrow">→</span>
+            <span class="step" data-i18n="legal.flow3">DeepSeek memberi kata kunci &amp; topik</span><span class="arrow">→</span>
+            <span class="step" data-i18n="legal.flow4">Pasal relevan membentuk soal</span>
           </div>
         </div>
 
         <div class="panel">
-          <h3>⬆️ Unggah PDF</h3>
+          <h3 data-i18n="legal.upload">⬆️ Unggah PDF</h3>
           <form id="legalForm">
             <div class="two-col" style="gap:10px;align-items:start">
-              <label class="fld">Judul dokumen
-                <input type="text" id="legalTitle" maxlength="160" placeholder="mis. POJK 11/2022 — Penyelenggaraan TI Bank Umum" required />
+              <label class="fld"><span data-i18n="legal.docTitle">Judul dokumen</span>
+                <input type="text" id="legalTitle" maxlength="160" placeholder="mis. POJK 11/2022 — Penyelenggaraan TI Bank Umum" data-i18n-placeholder="legal.docTitlePh" required />
               </label>
-              <label class="fld">Berkas PDF
+              <label class="fld"><span data-i18n="legal.file">Berkas PDF</span>
                 <input type="file" id="legalFile" accept="application/pdf,.pdf" required />
               </label>
             </div>
             <div class="row" style="margin-top:12px">
-              <button class="btn sm" type="submit" id="legalUploadBtn">Baca &amp; indeks</button>
+              <button class="btn sm" type="submit" id="legalUploadBtn" data-i18n="legal.index">Baca &amp; indeks</button>
             </div>
             <div id="legalMsg"></div>
           </form>
         </div>
 
         <div class="panel">
-          <h3>📂 Dokumen terindeks</h3>
+          <h3 data-i18n="legal.indexed">📂 Dokumen terindeks</h3>
           <div id="legalList"></div>
         </div>
 
         <div class="panel">
-          <h3>🔍 Uji pencarian per topik</h3>
-          <div class="muted" style="margin-bottom:10px">Lihat pasal mana yang akan dipakai saat soal untuk sebuah topik disusun.</div>
+          <h3 data-i18n="legal.testSearch">🔍 Uji pencarian per topik</h3>
+          <div class="muted" style="margin-bottom:10px" data-i18n="legal.testSearchDesc">Lihat pasal mana yang akan dipakai saat soal untuk sebuah topik disusun.</div>
           <div class="row" style="gap:10px">
             <select id="legalTopic" style="min-width:240px"></select>
-            <button class="btn sm ghost" id="legalSearchBtn">Cari</button>
+            <button class="btn sm ghost" id="legalSearchBtn" data-i18n="legal.search">Cari</button>
           </div>
           <div id="legalResults"></div>
         </div>
@@ -284,36 +294,56 @@
       <!-- Akun: profil, kata sandi, dan (Super Admin) pengelolaan peran -->
       <section class="tab hidden" id="tab-account">
         <div class="page-head"><div>
-          <h2>Akun</h2>
-          <div class="desc">Data akun Anda, kata sandi, dan daftar akun terdaftar.</div>
+          <h2 data-i18n="acc.title">Akun</h2>
+          <div class="desc" data-i18n="acc.desc">Data akun Anda, kata sandi, dan daftar akun terdaftar.</div>
         </div></div>
 
         <div class="panel">
-          <h3>👤 Profil</h3>
+          <h3 data-i18n="acc.profile">👤 Profil</h3>
           <div id="accountProfile" class="kv"></div>
         </div>
 
         <div class="panel">
-          <h3>🔐 Ganti Kata Sandi</h3>
+          <h3 data-i18n="lang.panel">🌐 Bahasa</h3>
+          <div class="muted" style="margin-bottom:10px" data-i18n="lang.panelDesc">Pilihan ini tersimpan di browser ini.</div>
+          <div class="two-col" style="gap:10px;align-items:start">
+            <label class="fld"><span data-i18n="lang.ui">Bahasa antarmuka</span>
+              <select id="uiLangSelect">
+                <option value="id">Bahasa Indonesia</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <label class="fld"><span data-i18n="lang.quiz">Bahasa soal kuis</span>
+              <select class="quiz-lang-select">
+                <option value="auto" data-i18n="lang.followUi">Ikuti bahasa antarmuka</option>
+                <option value="id">Bahasa Indonesia</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 data-i18n="acc.changePw">🔐 Ganti Kata Sandi</h3>
           <form id="passwordForm">
             <div class="two-col" style="gap:10px;align-items:start">
-              <label class="fld">Kata sandi saat ini
+              <label class="fld"><span data-i18n="acc.pwCurrent">Kata sandi saat ini</span>
                 <input type="password" id="pwCurrent" autocomplete="current-password" required />
               </label>
-              <label class="fld">Kata sandi baru
-                <input type="password" id="pwNew" autocomplete="new-password" placeholder="Min. 8 karakter, 1 angka" required />
+              <label class="fld"><span data-i18n="acc.pwNew">Kata sandi baru</span>
+                <input type="password" id="pwNew" autocomplete="new-password" placeholder="Min. 8 karakter, 1 angka" data-i18n-placeholder="acc.pwNewPh" required />
               </label>
             </div>
             <div class="row" style="margin-top:12px">
-              <button class="btn sm" type="submit">Simpan kata sandi</button>
+              <button class="btn sm" type="submit" data-i18n="acc.pwSave">Simpan kata sandi</button>
             </div>
             <div id="pwMsg"></div>
           </form>
         </div>
 
         <div class="panel hidden" id="usersPanel">
-          <h3>🧑‍💼 Akun Terdaftar &amp; Peran</h3>
-          <div class="muted" style="margin-bottom:10px">
+          <h3 data-i18n="acc.users">🧑‍💼 Akun Terdaftar &amp; Peran</h3>
+          <div class="muted" style="margin-bottom:10px" data-i18n-html="acc.usersDesc">
             Pendaftaran mandiri selalu menghasilkan <strong>Peserta Audit</strong>. Naikkan peran di sini
             saat seseorang perlu akses auditor, direktur, atau super admin.
           </div>
@@ -325,14 +355,14 @@
       <!-- Acknowledgement -->
       <section class="tab hidden" id="tab-acks">
         <div class="page-head"><div>
-          <h2>Acknowledgement</h2>
-          <div class="desc">Rekomendasi yang dikirim Super Admin/Auditor untuk ditinjau Direktur.</div>
+          <h2 data-i18n="ack.title">Acknowledgement</h2>
+          <div class="desc" data-i18n="ack.desc">Rekomendasi yang dikirim Super Admin/Auditor untuk ditinjau Direktur.</div>
         </div></div>
         <div class="panel">
           <div class="flow">
             <span class="step">Super Admin / Auditor</span><span class="arrow">→</span>
-            <span class="step">Rekomendasi AI</span><span class="arrow">→</span>
-            <span class="step">Direktur Acknowledge</span>
+            <span class="step" data-i18n="ack.flow2">Rekomendasi AI</span><span class="arrow">→</span>
+            <span class="step" data-i18n="ack.flow3">Direktur Acknowledge</span>
           </div>
         </div>
         <div id="ackList"></div>

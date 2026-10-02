@@ -9,12 +9,7 @@ const state = {
   lastAiMarkdown: '',
   lastQuizTopics: null,
 };
-const ROLE_META = {
-  super_admin: { icon: '🛡️', name: 'Super Admin' },
-  auditor: { icon: '🔎', name: 'IT Auditor' },
-  director: { icon: '✅', name: 'Direktur' },
-  participant: { icon: '👤', name: 'Peserta Audit' },
-};
+const ROLE_ICON = { super_admin: '🛡️', auditor: '🔎', director: '✅', participant: '👤' };
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -66,7 +61,7 @@ function api(path, opts = {}) {
 function sessionExpired() {
   state.role = null;
   showAuth();
-  formMsg('#loginMsg', 'Sesi Anda berakhir. Masuk kembali untuk melanjutkan.', 'error');
+  formMsg('#loginMsg', t('auth.expired'), 'error');
 }
 
 function scoreClass(v) { return v >= 80 ? 'good' : v >= 70 ? 'info' : v >= 55 ? 'warn' : 'bad'; }
@@ -102,13 +97,13 @@ const uiRole = (role) => (role === 'employee' ? 'participant' : role);
 // Kertas kerja kiri: kosong saat mode masuk (peran & cakupan akses tidak
 // diumbar sebelum login), berisi register kontrol saat mode daftar.
 const REG_CONTROLS = [
-  ['1.1', 'Nama lengkap terisi', () => $('#regName').value.trim().length >= 3],
-  ['1.2', 'Email berformat valid', () => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test($('#regEmail').value.trim())],
-  ['1.3', 'Divisi ditetapkan', () => !!$('#regDivision').value],
-  ['1.4', 'Kata sandi 8+ karakter, memuat angka', () => {
+  ['1.1', 'reg.c1', () => $('#regName').value.trim().length >= 3],
+  ['1.2', 'reg.c2', () => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test($('#regEmail').value.trim())],
+  ['1.3', 'reg.c3', () => !!$('#regDivision').value],
+  ['1.4', 'reg.c4', () => {
     const v = $('#regPassword').value; return v.length >= 8 && /\d/.test(v);
   }],
-  ['1.5', 'Konfirmasi kata sandi cocok', () => {
+  ['1.5', 'reg.c5', () => {
     const v = $('#regPassword').value; return v.length > 0 && v === $('#regConfirm').value;
   }],
 ];
@@ -121,22 +116,22 @@ function renderRegister() {
   if (authMode === 'login') {
     panel.classList.add('hidden');
     rows.innerHTML = '';
-    setStamp('idle', 'Akses terkendali', 'sesi aman · 7 hari');
+    setStamp('idle', t('stamp.idle1'), t('stamp.idle2'));
     return;
   }
   panel.classList.remove('hidden');
   const met = REG_CONTROLS.map(([, , test]) => { try { return test(); } catch (_) { return false; } });
   const doneCount = met.filter(Boolean).length;
-  $('#registerTitle').textContent = 'Kontrol pendaftaran';
-  $('#registerCount').textContent = `${doneCount} / ${REG_CONTROLS.length} terpenuhi`;
+  $('#registerTitle').textContent = t('reg.title');
+  $('#registerCount').textContent = t('reg.count', { done: doneCount, total: REG_CONTROLS.length });
   rows.innerHTML = REG_CONTROLS.map(([no, label], i) => `
     <li class="reg-row${met[i] ? ' is-met' : ''}">
       <span class="no">${no}</span>
-      <span class="what">${esc(label)}</span>
-      <span class="mark">${met[i] ? '✓ sesuai' : 'belum'}</span>
+      <span class="what">${esc(t(label))}</span>
+      <span class="mark">${met[i] ? t('reg.met') : t('reg.unmet')}</span>
     </li>`).join('');
-  if (doneCount === REG_CONTROLS.length) setStamp('verified', 'Kontrol terpenuhi', 'siap dikirim');
-  else setStamp('pending', 'Belum lengkap', `${doneCount} dari ${REG_CONTROLS.length} kontrol`);
+  if (doneCount === REG_CONTROLS.length) setStamp('verified', t('stamp.ok1'), t('stamp.ok2'));
+  else setStamp('pending', t('stamp.pending1'), t('stamp.pending2', { done: doneCount, total: REG_CONTROLS.length }));
 }
 
 let stampState = '';
@@ -179,11 +174,13 @@ async function loadRegisterDivisions() {
   if (divisionsLoaded) return;
   try {
     const list = await api('/api/auth/divisions');
-    $('#regDivision').innerHTML = '<option value="">Pilih divisi</option>' +
+    const keep = $('#regDivision').value;
+    $('#regDivision').innerHTML = `<option value="">${esc(t('auth.divPick'))}</option>` +
       list.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    $('#regDivision').value = keep;
     divisionsLoaded = true;
   } catch (_) {
-    $('#regDivision').innerHTML = '<option value="">Gagal memuat divisi — muat ulang halaman</option>';
+    $('#regDivision').innerHTML = `<option value="">${esc(t('auth.divFailed'))}</option>`;
   }
 }
 
@@ -199,7 +196,8 @@ $$('#auth .pw-toggle').forEach((btn) => btn.addEventListener('click', () => {
   const input = $(`#${btn.dataset.target}`);
   const show = input.type === 'password';
   input.type = show ? 'text' : 'password';
-  btn.textContent = show ? 'Sembunyikan' : 'Lihat';
+  btn.dataset.i18n = show ? 'auth.hide' : 'auth.show';
+  btn.textContent = t(btn.dataset.i18n);
 }));
 $('#registerForm').addEventListener('input', renderRegister);
 window.addEventListener('resize', moveUnderline);
@@ -208,7 +206,7 @@ $('#loginForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const btn = $('#loginSubmit');
   formMsg('#loginMsg', '');
-  btn.disabled = true; btn.textContent = 'Memeriksa…';
+  btn.disabled = true; btn.textContent = t('auth.checking');
   try {
     const { user } = await api('/api/auth/login', {
       method: 'POST',
@@ -217,7 +215,7 @@ $('#loginForm').addEventListener('submit', async (ev) => {
     await enterApp(user);
   } catch (e) {
     formMsg('#loginMsg', e.message, 'error');
-    btn.disabled = false; btn.textContent = 'Masuk';
+    btn.disabled = false; btn.textContent = t('auth.login');
   }
 });
 
@@ -226,9 +224,9 @@ $('#registerForm').addEventListener('submit', async (ev) => {
   const btn = $('#registerSubmit');
   formMsg('#registerMsg', '');
   if ($('#regPassword').value !== $('#regConfirm').value) {
-    return formMsg('#registerMsg', 'Konfirmasi kata sandi belum cocok.', 'error');
+    return formMsg('#registerMsg', t('auth.confirmMismatch'), 'error');
   }
-  btn.disabled = true; btn.textContent = 'Membuat akun…';
+  btn.disabled = true; btn.textContent = t('auth.creating');
   try {
     const { user } = await api('/api/auth/register', {
       method: 'POST',
@@ -242,7 +240,7 @@ $('#registerForm').addEventListener('submit', async (ev) => {
     await enterApp(user);
   } catch (e) {
     formMsg('#registerMsg', e.message, 'error');
-    btn.disabled = false; btn.textContent = 'Buat akun';
+    btn.disabled = false; btn.textContent = t('auth.create');
   }
 });
 
@@ -265,10 +263,7 @@ async function enterApp(user) {
   state.employeeName = user.name;
   const role = state.role;
   try { state.config = await api('/api/config'); } catch (_) {}
-  const meta = ROLE_META[role] || ROLE_META.participant;
-  $('#roleIcon').textContent = meta.icon;
-  $('#roleName').textContent = user.name;
-  $('#modelName').textContent = user.division ? `${meta.name} · ${user.division}` : meta.name;
+  renderRoleBadge();
   // generic role-gated nav: show items whose data-roles includes this role
   let firstTab = null;
   $$('.nav-item[data-tab]').forEach((n) => {
@@ -294,6 +289,15 @@ async function enterApp(user) {
   }
 }
 
+function renderRoleBadge() {
+  const user = state.user;
+  if (!user) return;
+  const name = t(`role.${state.role}`);
+  $('#roleIcon').textContent = ROLE_ICON[state.role] || ROLE_ICON.participant;
+  $('#roleName').textContent = user.name;
+  $('#modelName').textContent = user.division ? `${name} · ${user.division}` : name;
+}
+
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
@@ -313,19 +317,16 @@ $$('.nav-item[data-tab]').forEach((n) => n.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 // Akun: profil, ganti kata sandi, pengelolaan peran (Super Admin)
 // ---------------------------------------------------------------------------
-const ROLE_LABEL = {
-  super_admin: 'Super Admin', auditor: 'IT Auditor',
-  director: 'Direktur', employee: 'Peserta Audit',
-};
+const roleLabel = (r) => (I18N.id[`role.${r}`] ? t(`role.${r}`) : r);
 
 function loadAccount() {
   const u = state.user;
   if (!u) return;
   $('#accountProfile').innerHTML = `
-    <span>Nama: <strong>${esc(u.name)}</strong></span>
-    <span>Email: <strong>${esc(u.email)}</strong></span>
-    <span>Divisi: <strong>${esc(u.division || '-')}</strong></span>
-    <span>Peran: <span class="pill info">${esc(ROLE_LABEL[u.role] || u.role)}</span></span>`;
+    <span>${t('acc.name')}: <strong>${esc(u.name)}</strong></span>
+    <span>${t('acc.email')}: <strong>${esc(u.email)}</strong></span>
+    <span>${t('acc.division')}: <strong>${esc(u.division || '-')}</strong></span>
+    <span>${t('acc.role')}: <span class="pill info">${esc(roleLabel(u.role))}</span></span>`;
   const panel = $('#usersPanel');
   panel.classList.toggle('hidden', u.role !== 'super_admin');
   if (u.role === 'super_admin') loadUsers();
@@ -340,7 +341,7 @@ $('#passwordForm').addEventListener('submit', async (ev) => {
       method: 'POST',
       body: JSON.stringify({ current_password: $('#pwCurrent').value, new_password: $('#pwNew').value }),
     });
-    msg.innerHTML = '<div class="notice ok">Kata sandi diperbarui.</div>';
+    msg.innerHTML = `<div class="notice ok">${esc(t('acc.pwDone'))}</div>`;
     $('#pwCurrent').value = ''; $('#pwNew').value = '';
   } catch (e) {
     msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
@@ -349,26 +350,26 @@ $('#passwordForm').addEventListener('submit', async (ev) => {
 
 async function loadUsers() {
   const box = $('#usersTable');
-  box.innerHTML = '<span class="spinner"></span> Memuat akun…';
+  box.innerHTML = `<span class="spinner"></span> ${esc(t('acc.loadingUsers'))}`;
   try {
     const { users, roles } = await api('/api/admin/users');
     box.innerHTML = `
       <div class="scroll-x"><table>
-        <thead><tr><th>Nama</th><th>Email</th><th>Divisi</th><th>Peran</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>${t('acc.colName')}</th><th>${t('acc.colEmail')}</th><th>${t('acc.colDivision')}</th><th>${t('acc.colRole')}</th><th>${t('acc.colStatus')}</th><th></th></tr></thead>
         <tbody>${users.map((u) => `
           <tr>
-            <td>${esc(u.name)}${u.id === state.user.id ? ' <span class="pill muted">Anda</span>' : ''}</td>
+            <td>${esc(u.name)}${u.id === state.user.id ? ` <span class="pill muted">${esc(t('acc.you'))}</span>` : ''}</td>
             <td><span class="muted">${esc(u.email)}</span></td>
             <td><span class="muted">${esc(u.division)}</span></td>
             <td>
               <select data-role-for="${u.id}"${u.id === state.user.id ? ' disabled' : ''}>
-                ${roles.map((r) => `<option value="${r}"${r === u.role ? ' selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('')}
+                ${roles.map((r) => `<option value="${r}"${r === u.role ? ' selected' : ''}>${esc(roleLabel(r))}</option>`).join('')}
               </select>
             </td>
-            <td><span class="pill ${u.status === 'active' ? 'good' : 'muted'}">${u.status === 'active' ? 'Aktif' : 'Nonaktif'}</span>
-                ${u.active_sessions ? '<span class="pill info">sesi aktif</span>' : ''}</td>
+            <td><span class="pill ${u.status === 'active' ? 'good' : 'muted'}">${u.status === 'active' ? t('acc.active') : t('acc.inactive')}</span>
+                ${u.active_sessions ? `<span class="pill info">${esc(t('acc.activeSession'))}</span>` : ''}</td>
             <td>${u.id === state.user.id ? '' :
-              `<button class="btn ghost sm" data-status-for="${u.id}" data-next="${u.status === 'active' ? 'disabled' : 'active'}">${u.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</button>`}</td>
+              `<button class="btn ghost sm" data-status-for="${u.id}" data-next="${u.status === 'active' ? 'disabled' : 'active'}">${u.status === 'active' ? t('acc.disable') : t('acc.enable')}</button>`}</td>
           </tr>`).join('')}
         </tbody>
       </table></div>`;
@@ -386,7 +387,7 @@ async function updateUser(path, body) {
   msg.innerHTML = '';
   try {
     const { user } = await api(path, { method: 'POST', body: JSON.stringify(body) });
-    msg.innerHTML = `<div class="notice ok">${esc(user.name)} diperbarui — ${esc(ROLE_LABEL[user.role] || user.role)}, ${user.status === 'active' ? 'aktif' : 'nonaktif'}.</div>`;
+    msg.innerHTML = `<div class="notice ok">${esc(t('acc.updated', { name: user.name, role: roleLabel(user.role), status: user.status === 'active' ? t('acc.activeLc') : t('acc.inactiveLc') }))}</div>`;
     loadUsers();
   } catch (e) {
     msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
@@ -399,11 +400,11 @@ async function updateUser(path, body) {
 // ---------------------------------------------------------------------------
 async function loadOverview() {
   const o = await api('/api/overview');
-  const t = o.totals;
+  const tot = o.totals;
   $('#statCards').innerHTML = '';
   const cards = [
-    ['Karyawan', t.employees], ['Divisi', t.divisions], ['Topik Audit', t.topics],
-    ['Hasil Kuis', t.attempts], ['Skor Rata-rata', `${t.avgScore}<small>/100</small>`],
+    [t('ov.employees'), tot.employees], [t('ov.divisions'), tot.divisions], [t('ov.topics'), tot.topics],
+    [t('ov.attempts'), tot.attempts], [t('ov.avg'), `${tot.avgScore}<small>/100</small>`],
   ];
   cards.forEach(([k, v]) => {
     const c = el('div', 'card stat');
@@ -411,7 +412,7 @@ async function loadOverview() {
     $('#statCards').appendChild(c);
   });
   $('#divBars').innerHTML = '';
-  o.byDivision.forEach((d) => $('#divBars').appendChild(bar(d.division, d.avg_score, `${d.gap_attempts} gap`)));
+  o.byDivision.forEach((d) => $('#divBars').appendChild(bar(d.division, d.avg_score, t('ov.gapNote', { n: d.gap_attempts }))));
   $('#topicBars').innerHTML = '';
   o.byTopic.forEach((tp) => $('#topicBars').appendChild(bar(tp.topic, tp.avg_score)));
 }
@@ -451,7 +452,7 @@ async function loadGaps() {
   const id = Number($('#scopeRef').value);
   const label = $('#scopeRef').selectedOptions[0]?.textContent || '';
   const box = $('#gapResult');
-  box.innerHTML = '<div class="panel"><span class="spinner"></span> Memuat…</div>';
+  box.innerHTML = `<div class="panel"><span class="spinner"></span> ${esc(t('common.loading'))}</div>`;
   const data = await api(`/api/gaps/${type}?id=${id}`);
   state.lastGap = { scope_type: type, scope_ref: id, scope_label: type === 'employee' ? label.split(' — ')[0] : label };
   state.lastAiMarkdown = ''; state.lastQuizTopics = null;
@@ -459,7 +460,7 @@ async function loadGaps() {
   const topics = data.topics || [];
   const gapCount = (data.gaps || []).length;
   // Per karyawan, skor topik = nilai terbaik; per divisi = rata-rata nilai terbaik.
-  const scoreHead = type === 'employee' ? 'Skor Terbaik' : 'Skor Rata-rata';
+  const scoreHead = type === 'employee' ? t('gaps.bestScore') : t('gaps.avgScore');
   const rows = topics.map((t) => `
     <tr>
       <td>${esc(t.topic)}</td>
@@ -473,18 +474,18 @@ async function loadGaps() {
     <div class="panel">
       <div class="page-head" style="margin:0 0 6px">
         <div><h3 style="margin:0">${esc(state.lastGap.scope_label)}</h3>
-          <div class="kv"><span>Skor keseluruhan: <strong style="color:${scoreColor(data.overall)}">${data.overall}/100</strong></span>
-          <span>Gap terdeteksi: <strong>${gapCount}</strong></span>
-          <span>Ambang gap: &lt; ${data.gapThreshold}</span></div>
+          <div class="kv"><span>${t('gaps.overall')}: <strong style="color:${scoreColor(data.overall)}">${data.overall}/100</strong></span>
+          <span>${t('gaps.detected')}: <strong>${gapCount}</strong></span>
+          <span>${t('gaps.threshold')}: &lt; ${data.gapThreshold}</span></div>
         </div>
       </div>
       <div class="scroll-x"><table>
-        <thead><tr><th>Topik</th><th>Area</th><th>${scoreHead}</th><th>Attempts</th><th>Status</th></tr></thead>
+        <thead><tr><th>${t('gaps.colTopic')}</th><th>${t('gaps.colArea')}</th><th>${scoreHead}</th><th>${t('gaps.colAttempts')}</th><th>${t('gaps.colStatus')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
       <div class="row" style="margin-top:14px">
-        <button class="btn sm" id="btnAiRec">🧠 AI Recommendation</button>
-        <button class="btn sm ghost" id="btnQuizRec">📚 Rekomendasi Topik Kuis</button>
+        <button class="btn sm" id="btnAiRec">${t('gaps.aiRec')}</button>
+        <button class="btn sm ghost" id="btnQuizRec">${t('gaps.quizRec')}</button>
       </div>
       <div id="aiRecBox"></div>
       <div id="quizRecBox"></div>
@@ -496,54 +497,54 @@ async function loadGaps() {
 // Feature 1
 async function runAiRecommendation() {
   const btn = $('#btnAiRec'); const box = $('#aiRecBox');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menganalisis…';
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${esc(t('gaps.analyzing'))}`;
   box.innerHTML = '';
   try {
-    const out = await api('/api/ai/recommendation', { method: 'POST', body: JSON.stringify(state.lastGap) });
+    const out = await api('/api/ai/recommendation', { method: 'POST', body: JSON.stringify({ ...state.lastGap, lang: i18n.lang }) });
     state.lastAiMarkdown = out.markdown;
     box.innerHTML = `
       <div class="panel" style="margin-top:14px">
-        <h3>🧠 AI Recommendation <span class="pill muted">${esc(out.model || state.config.model)}</span></h3>
+        <h3>${t('gaps.aiRec')} <span class="pill muted">${esc(out.model || state.config.model)}</span></h3>
         <div class="md">${md(out.markdown)}</div>
-        ${canSubmit() ? '<div class="row" style="margin-top:12px"><button class="btn sm" id="btnSubmitRec">📤 Kirim ke Direktur untuk Acknowledge</button></div><div id="submitMsg"></div>' : ''}
+        ${canSubmit() ? `<div class="row" style="margin-top:12px"><button class="btn sm" id="btnSubmitRec">${t('gaps.sendToDirector')}</button></div><div id="submitMsg"></div>` : ''}
       </div>`;
     if (canSubmit()) $('#btnSubmitRec').addEventListener('click', () => submitRecommendation('ai'));
   } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal: ${esc(e.message)}</div>`;
-  } finally { btn.disabled = false; btn.innerHTML = '🧠 AI Recommendation'; }
+    box.innerHTML = `<div class="notice err">${esc(t('common.failed', { msg: e.message }))}</div>`;
+  } finally { btn.disabled = false; btn.innerHTML = t('gaps.aiRec'); }
 }
 
 // Feature 2
 async function runQuizTopics() {
   const btn = $('#btnQuizRec'); const box = $('#quizRecBox');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menyusun…';
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${esc(t('gaps.composing'))}`;
   box.innerHTML = '';
   try {
-    const out = await api('/api/ai/quiz-topics', { method: 'POST', body: JSON.stringify(state.lastGap) });
+    const out = await api('/api/ai/quiz-topics', { method: 'POST', body: JSON.stringify({ ...state.lastGap, lang: i18n.lang }) });
     state.lastQuizTopics = out.recommended_quizzes || [];
     const cards = (out.recommended_quizzes || []).map((q) => {
-      const pr = q.priority || 'Sedang';
-      const prClass = /tinggi/i.test(pr) ? 'bad' : /sedang/i.test(pr) ? 'warn' : 'info';
+      const pr = q.priority || (i18n.lang === 'en' ? 'Medium' : 'Sedang');
+      const prClass = /tinggi|high/i.test(pr) ? 'bad' : /sedang|medium/i.test(pr) ? 'warn' : 'info';
       const subs = (q.suggested_subtopics || []).map((s) => `<span class="pill muted" style="margin:2px">${esc(s)}</span>`).join(' ');
       return `<div class="card" style="margin-top:10px">
         <div class="row" style="justify-content:space-between">
           <strong>${esc(q.topic)}</strong>
-          <span class="pill ${prClass}">Prioritas ${esc(pr)}</span>
+          <span class="pill ${prClass}">${esc(t('gaps.priority', { p: pr }))}</span>
         </div>
         <div class="muted" style="margin:6px 0">${esc(q.reason || '')}</div>
         <div>${subs}</div>
-        ${q.target_score ? `<div class="kv"><span>Target skor: <strong>${esc(q.target_score)}/100</strong></span></div>` : ''}
+        ${q.target_score ? `<div class="kv"><span>${t('gaps.targetScore')}: <strong>${esc(q.target_score)}/100</strong></span></div>` : ''}
       </div>`;
     }).join('');
     box.innerHTML = `
       <div class="panel" style="margin-top:14px">
-        <h3>📚 Rekomendasi Topik Kuis <span class="pill muted">${esc(out.model || state.config.model)}</span></h3>
+        <h3>${t('gaps.quizRec')} <span class="pill muted">${esc(out.model || state.config.model)}</span></h3>
         <p class="muted">${esc(out.summary || '')}</p>
-        ${cards || '<div class="muted">Tidak ada rekomendasi.</div>'}
+        ${cards || `<div class="muted">${esc(t('gaps.noRec'))}</div>`}
       </div>`;
   } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal: ${esc(e.message)}</div>`;
-  } finally { btn.disabled = false; btn.innerHTML = '📚 Rekomendasi Topik Kuis'; }
+    box.innerHTML = `<div class="notice err">${esc(t('common.failed', { msg: e.message }))}</div>`;
+  } finally { btn.disabled = false; btn.innerHTML = t('gaps.quizRec'); }
 }
 
 function canSubmit() { return state.role === 'super_admin' || state.role === 'auditor'; }
@@ -553,21 +554,21 @@ async function submitRecommendation() {
   // Jangan pernah mengirim rekomendasi hampa: kalau panggilan AI mengembalikan
   // teks kosong, yang tersimpan di antrean Direktur adalah kartu tanpa isi.
   if (!state.lastAiMarkdown || !String(state.lastAiMarkdown).trim()) {
-    msg.innerHTML = '<div class="notice err">Isi rekomendasi masih kosong — jalankan ulang AI Recommendation lebih dulu.</div>';
+    msg.innerHTML = `<div class="notice err">${esc(t('gaps.emptyRec'))}</div>`;
     return;
   }
   const body = {
     scope_type: state.lastGap.scope_type,
     scope_ref: state.lastGap.scope_ref,
     scope_label: state.lastGap.scope_label,
-    title: `Rekomendasi gap — ${state.lastGap.scope_label}`,
+    title: t('gaps.recTitle', { label: state.lastGap.scope_label }),
     recommendation: state.lastAiMarkdown,
     recommended_topics: (state.lastQuizTopics || []).map((q) => q.topic),
     model: state.config.model,
   };
   try {
     await api('/api/recommendations', { method: 'POST', body: JSON.stringify(body) });
-    msg.innerHTML = '<div class="notice ok">Terkirim ke Direktur. Lihat tab Acknowledgement.</div>';
+    msg.innerHTML = `<div class="notice ok">${esc(t('gaps.sent'))}</div>`;
   } catch (e) {
     msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`;
   }
@@ -576,8 +577,7 @@ async function submitRecommendation() {
 // ---------------------------------------------------------------------------
 // Tren Skor per Waktu (SVG line chart, zero-dependency)
 // ---------------------------------------------------------------------------
-const MON_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-function monthLabel(ym) { const [y, m] = ym.split('-'); return `${MON_ID[(+m) - 1]} ${y.slice(2)}`; }
+function monthLabel(ym) { const [y, m] = ym.split('-'); return `${t('trend.months').split(',')[(+m) - 1]} ${y.slice(2)}`; }
 
 function trendChart(months, series, gapThreshold) {
   const W = 760, H = 300, padL = 40, padR = 18, padT = 16, padB = 34;
@@ -593,7 +593,7 @@ function trendChart(months, series, gapThreshold) {
   }
   const gy = Y(gapThreshold);
   g += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#f87171" stroke-width="1.5" stroke-dasharray="5 4"/>`;
-  g += `<text x="${W - padR}" y="${gy - 5}" text-anchor="end" fill="#f87171" font-size="10.5">ambang gap ${gapThreshold}</text>`;
+  g += `<text x="${W - padR}" y="${gy - 5}" text-anchor="end" fill="#f87171" font-size="10.5">${esc(t('trend.gapLine', { n: gapThreshold }))}</text>`;
   months.forEach((m, i) => {
     g += `<text x="${X(i)}" y="${H - 12}" text-anchor="middle" fill="#97a3c7" font-size="11">${monthLabel(m)}</text>`;
   });
@@ -633,7 +633,7 @@ async function loadTrend() {
   if (range !== 'all') params.set('months', range);
   const url = '/api/trend' + (params.toString() ? `?${params}` : '');
   const box = $('#trendChart'); const legend = $('#trendLegend');
-  box.innerHTML = '<span class="spinner"></span> Memuat…';
+  box.innerHTML = `<span class="spinner"></span> ${esc(t('common.loading'))}`;
   try {
     const data = await api(url);
     const months = data.overall.map((r) => r.month);
@@ -642,16 +642,16 @@ async function loadTrend() {
     if (data.filtered) {
       const fmap = Object.fromEntries(data.filtered.map((r) => [r.month, r.avg_score]));
       series.push({ name: data.label, color: '#7c5cff', map: fmap });
-      series.push({ name: 'Keseluruhan', color: '#5b8cff', map: overallMap, faint: true });
+      series.push({ name: t('trend.overall'), color: '#5b8cff', map: overallMap, faint: true });
     } else {
-      series.push({ name: 'Keseluruhan', color: '#5b8cff', map: overallMap });
+      series.push({ name: t('trend.overall'), color: '#5b8cff', map: overallMap });
     }
     box.innerHTML = trendChart(months, series, data.gapThreshold);
     legend.innerHTML = series.map((s) =>
       `<span class="row" style="gap:6px"><span style="width:13px;height:13px;border-radius:3px;background:${s.color};display:inline-block;${s.faint ? 'opacity:.65' : ''}"></span><span class="muted">${esc(s.name)}</span></span>`
     ).join('&nbsp;&nbsp;');
   } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal memuat tren: ${esc(e.message)}</div>`;
+    box.innerHTML = `<div class="notice err">${esc(t('trend.failed', { msg: e.message }))}</div>`;
   }
 }
 
@@ -662,7 +662,7 @@ async function loadAcks() {
   const box = $('#ackList'); if (!box) return;
   const recs = await api('/api/recommendations');
   if (!recs.length) {
-    box.innerHTML = '<div class="panel muted">Belum ada rekomendasi. Super Admin/Auditor dapat mengirim dari tab Knowledge Gaps.</div>';
+    box.innerHTML = `<div class="panel muted">${esc(t('ack.empty'))}</div>`;
     return;
   }
   box.innerHTML = '';
@@ -673,30 +673,30 @@ async function loadAcks() {
     card.innerHTML = `
       <div class="page-head" style="margin:0 0 8px">
         <div><h3 style="margin:0">${esc(r.title)}</h3>
-          <div class="kv"><span>Scope: <strong>${esc(r.scope_label || r.scope_type)}</strong></span>
-            <span>Oleh: ${esc(r.created_by)}</span>
-            <span>${new Date(r.created_at).toLocaleString('id-ID')}</span></div></div>
-        <span class="pill ${ackd ? 'good' : 'warn'}">${ackd ? '✓ Acknowledged' : 'Menunggu Direktur'}</span>
+          <div class="kv"><span>${t('ack.scope')}: <strong>${esc(r.scope_label || r.scope_type)}</strong></span>
+            <span>${t('ack.by')}: ${esc(r.created_by)}</span>
+            <span>${new Date(r.created_at).toLocaleString(locale())}</span></div></div>
+        <span class="pill ${ackd ? 'good' : 'warn'}">${ackd ? t('ack.done') : t('ack.waiting')}</span>
       </div>
       ${topics.length ? `<div style="margin:6px 0">${topics.map((t) => `<span class="pill info" style="margin:2px">${esc(t)}</span>`).join(' ')}</div>` : ''}
-      <details><summary class="muted" style="cursor:pointer">Lihat isi rekomendasi</summary>
+      <details><summary class="muted" style="cursor:pointer">${t('ack.view')}</summary>
         <div class="md" style="margin-top:8px">${md(r.recommendation || '-')}</div></details>
       <div class="ackArea" style="margin-top:12px"></div>`;
     const area = card.querySelector('.ackArea');
     if (ackd) {
-      area.innerHTML = `<div class="notice ok">Di-acknowledge oleh <strong>${esc(r.ack_by)}</strong> · ${new Date(r.ack_at).toLocaleString('id-ID')}${r.ack_note ? `<br>Catatan: ${esc(r.ack_note)}` : ''}</div>`;
+      area.innerHTML = `<div class="notice ok">${t('ack.ackBy', { who: esc(r.ack_by), when: new Date(r.ack_at).toLocaleString(locale()) })}${r.ack_note ? `<br>${t('ack.note')}: ${esc(r.ack_note)}` : ''}</div>`;
     } else if (state.role === 'director') {
       area.innerHTML = `
-        <div class="row"><input type="text" placeholder="Catatan (opsional)" style="flex:1" />
-          <button class="btn sm">✅ Acknowledge</button></div>`;
+        <div class="row"><input type="text" placeholder="${esc(t('ack.notePh'))}" style="flex:1" />
+          <button class="btn sm">${t('ack.btn')}</button></div>`;
       const input = area.querySelector('input'); const btn = area.querySelector('button');
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
         try { await api('/api/recommendations/acknowledge', { method: 'POST', body: JSON.stringify({ id: r.id, ack_note: input.value }) }); loadAcks(); }
-        catch (e) { btn.disabled = false; btn.textContent = '✅ Acknowledge'; alert(e.message); }
+        catch (e) { btn.disabled = false; btn.textContent = t('ack.btn'); alert(e.message); }
       });
     } else {
-      area.innerHTML = '<span class="muted">Menunggu acknowledge dari Direktur.</span>';
+      area.innerHTML = `<span class="muted">${esc(t('ack.waitingLong'))}</span>`;
     }
     box.appendChild(card);
   });
@@ -719,7 +719,7 @@ async function saveQuizSetting(key, value) {
   const msg = $('#settingsMsg');
   try {
     await api('/api/settings', { method: 'POST', body: JSON.stringify({ [key]: value }) });
-    msg.innerHTML = '<div class="notice ok">Tersimpan.</div>';
+    msg.innerHTML = `<div class="notice ok">${esc(t('common.saved'))}</div>`;
     setTimeout(() => { if (msg) msg.innerHTML = ''; }, 1500);
   } catch (e) { msg.innerHTML = `<div class="notice err">${esc(e.message)}</div>`; }
 }
@@ -745,7 +745,7 @@ function loadPdfJs() {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.js`;
         resolve(window.pdfjsLib);
       };
-      s.onerror = () => { pdfjsReady = null; reject(new Error('Gagal memuat pembaca PDF (pdf.js).')); };
+      s.onerror = () => { pdfjsReady = null; reject(new Error(t('legal.pdfLoadFail'))); };
       document.head.appendChild(s);
     });
   }
@@ -793,37 +793,37 @@ async function loadLegal() {
     } catch (_) {}
   }
   const box = $('#legalList');
-  box.innerHTML = '<span class="spinner"></span> Memuat…';
+  box.innerHTML = `<span class="spinner"></span> ${esc(t('common.loading'))}`;
   try {
     const { documents } = await api('/api/legal/documents');
     if (!documents.length) {
-      box.innerHTML = '<div class="muted">Belum ada dokumen. Tanpa dokumen, soal disusun dari pengetahuan IT audit umum.</div>';
+      box.innerHTML = `<div class="muted">${esc(t('legal.empty'))}</div>`;
       return;
     }
     box.innerHTML = `<div class="scroll-x"><table>
-      <thead><tr><th>Judul</th><th>Halaman</th><th>Potongan</th><th>Pengayaan AI</th><th>Diunggah</th><th></th></tr></thead>
+      <thead><tr><th>${t('legal.colTitle')}</th><th>${t('legal.colPages')}</th><th>${t('legal.colChunks')}</th><th>${t('legal.colEnrich')}</th><th>${t('legal.colUploaded')}</th><th></th></tr></thead>
       <tbody>${documents.map((d) => {
         const done = d.enrichedCount >= d.chunkCount;
         const status = done
-          ? '<span class="pill good">Selesai</span>'
+          ? `<span class="pill good">${esc(t('legal.done'))}</span>`
           : `<span class="pill warn">${d.enrichedCount}/${d.chunkCount}</span>
-             <button class="btn sm ghost" data-enrich="${d.id}">Lanjutkan</button>`;
+             <button class="btn sm ghost" data-enrich="${d.id}">${esc(t('legal.continue'))}</button>`;
         return `<tr>
           <td>${esc(d.title)}<div class="muted" style="font-size:12px">${esc(d.filename || '')}</div></td>
           <td>${d.pages}</td>
           <td>${d.chunkCount}</td>
           <td id="enrich-${d.id}">${status}</td>
           <td><span class="muted">${esc(d.uploadedBy || '-')}<br>${esc(String(d.uploadedAt || '').slice(0, 10))}</span></td>
-          <td><button class="btn sm ghost" data-del="${d.id}" data-title="${esc(d.title)}">Hapus</button></td>
+          <td><button class="btn sm ghost" data-del="${d.id}" data-title="${esc(d.title)}">${esc(t('legal.delete'))}</button></td>
         </tr>`;
       }).join('')}</tbody></table></div>
-      <div class="muted" style="margin-top:8px;font-size:12px">Pengayaan AI opsional tetapi disarankan: tanpa itu pencarian hanya mengandalkan kecocokan kata.</div>`;
+      <div class="muted" style="margin-top:8px;font-size:12px">${esc(t('legal.enrichHint'))}</div>`;
     box.querySelectorAll('button[data-enrich]').forEach((b) =>
       b.addEventListener('click', () => enrichLegal(Number(b.dataset.enrich))));
     box.querySelectorAll('button[data-del]').forEach((b) =>
       b.addEventListener('click', () => deleteLegal(Number(b.dataset.del), b.dataset.title, b)));
   } catch (e) {
-    box.innerHTML = `<div class="notice err">Gagal memuat: ${esc(e.message)}</div>`;
+    box.innerHTML = `<div class="notice err">${esc(t('common.failedLoad', { msg: e.message }))}</div>`;
   }
 }
 
@@ -831,12 +831,12 @@ async function loadLegal() {
 async function enrichLegal(id) {
   const cell = () => $(`#enrich-${id}`);
   for (;;) {
-    if (cell()) cell().innerHTML = '<span class="spinner"></span> DeepSeek memberi label…';
+    if (cell()) cell().innerHTML = `<span class="spinner"></span> ${esc(t('legal.enriching'))}`;
     let out;
     try {
       out = await api('/api/legal/enrich', { method: 'POST', body: JSON.stringify({ id }) });
     } catch (e) {
-      if (cell()) cell().innerHTML = `<span class="pill bad">Gagal</span> <button class="btn sm ghost" data-retry="${id}">Coba lagi</button>
+      if (cell()) cell().innerHTML = `<span class="pill bad">${esc(t('legal.failedPill'))}</span> <button class="btn sm ghost" data-retry="${id}">${esc(t('legal.retry'))}</button>
         <div class="muted" style="font-size:12px">${esc(e.message)}</div>`;
       const r = cell() && cell().querySelector('button[data-retry]');
       if (r) r.addEventListener('click', () => enrichLegal(id));
@@ -852,16 +852,16 @@ async function enrichLegal(id) {
 async function deleteLegal(id, title, btn) {
   if (btn.dataset.armed !== '1') {
     btn.dataset.armed = '1';
-    btn.textContent = 'Yakin hapus?';
+    btn.textContent = t('legal.confirmDelete');
     btn.classList.remove('ghost');
-    setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = 'Hapus'; btn.classList.add('ghost'); } }, 4000);
+    setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = t('legal.delete'); btn.classList.add('ghost'); } }, 4000);
     return;
   }
   try {
     await api('/api/legal/delete', { method: 'POST', body: JSON.stringify({ id }) });
     loadLegal();
   } catch (e) {
-    $('#legalMsg').innerHTML = `<div class="notice err">Gagal menghapus "${esc(title)}": ${esc(e.message)}</div>`;
+    $('#legalMsg').innerHTML = `<div class="notice err">${esc(t('legal.deleteFailed', { title, msg: e.message }))}</div>`;
   }
 }
 
@@ -869,17 +869,17 @@ async function searchLegal() {
   const box = $('#legalResults');
   const topicId = Number($('#legalTopic').value);
   if (!topicId) return;
-  box.innerHTML = '<div style="margin-top:10px"><span class="spinner"></span> Mencari…</div>';
+  box.innerHTML = `<div style="margin-top:10px"><span class="spinner"></span> ${esc(t('legal.searching'))}</div>`;
   try {
     const out = await api('/api/legal/search', { method: 'POST', body: JSON.stringify({ topic_id: topicId }) });
     if (!out.results.length) {
-      box.innerHTML = `<div class="notice" style="margin-top:10px">Tidak ada pasal yang cukup relevan untuk <strong>${esc(out.topic)}</strong>. Soal topik ini disusun dari pengetahuan umum.</div>`;
+      box.innerHTML = `<div class="notice" style="margin-top:10px">${t('legal.noHits', { topic: esc(out.topic) })}</div>`;
       return;
     }
     box.innerHTML = out.results.map((r) => `
       <div class="card" style="margin-top:10px">
         <div class="row" style="justify-content:space-between;gap:8px">
-          <strong>📚 ${esc(r.citation)}</strong><span class="pill muted">skor ${r.score}</span>
+          <strong>📚 ${esc(r.citation)}</strong><span class="pill muted">${esc(t('legal.score', { n: r.score }))}</span>
         </div>
         <div class="muted" style="margin-top:6px;white-space:pre-line;font-size:13px">${esc(r.text)}</div>
       </div>`).join('');
@@ -906,18 +906,18 @@ async function searchLegal() {
     if (!file || !title) return;
     btn.disabled = true;
     try {
-      msg.innerHTML = '<div class="notice"><span class="spinner"></span> Membaca PDF…</div>';
+      msg.innerHTML = `<div class="notice"><span class="spinner"></span> ${esc(t('legal.reading'))}</div>`;
       const pages = await extractPdfPages(file, (n, total) => {
-        msg.innerHTML = `<div class="notice"><span class="spinner"></span> Membaca halaman ${n}/${total}…</div>`;
+        msg.innerHTML = `<div class="notice"><span class="spinner"></span> ${esc(t('legal.readingPage', { n, total }))}</div>`;
       });
       if (!pages.some((pg) => pg.text.trim())) {
-        throw new Error('PDF tidak memuat teks — kemungkinan hasil pindaian. Jalankan OCR lebih dulu.');
+        throw new Error(t('legal.noText'));
       }
-      msg.innerHTML = '<div class="notice"><span class="spinner"></span> Memotong per pasal & membangun indeks…</div>';
+      msg.innerHTML = `<div class="notice"><span class="spinner"></span> ${esc(t('legal.chunking'))}</div>`;
       const { document: doc } = await api('/api/legal/documents', {
         method: 'POST', body: JSON.stringify({ title, filename: file.name, pages }),
       });
-      msg.innerHTML = `<div class="notice ok">Terindeks: <strong>${esc(doc.title)}</strong> — ${doc.pages} halaman, ${doc.chunkCount} potongan. DeepSeek kini memberi label topik…</div>`;
+      msg.innerHTML = `<div class="notice ok">${t('legal.indexedOk', { title: esc(doc.title), pages: doc.pages, chunks: doc.chunkCount })}</div>`;
       form.reset();
       await loadLegal();
       await enrichLegal(doc.id);
@@ -936,24 +936,24 @@ async function loadNewQuiz() {
   const gapBox = $('#newQuizGapBox');
   if (!gapBox) return;
   // refreshes only the topic list; never clears the quiz/result area (#newQuizPlayBox)
-  gapBox.innerHTML = '<div class="panel"><span class="spinner"></span> Memuat daftar topik kuis…</div>';
+  gapBox.innerHTML = `<div class="panel"><span class="spinner"></span> ${esc(t('quiz.loadingTopics'))}</div>`;
   try {
     const data = await api(`/api/participant/curriculum?id=${state.employeeId}`);
     const pass = state.config.gapThreshold; // ambang lulus (70)
-    const rows = (data.topics || []).map((t, idx) => {
-      const status = t.done
-        ? (t.best_score < pass
-            ? `<span class="pill bad">Failed · ${t.best_score}/100</span>`
-            : `<span class="pill good">Passed · ${t.best_score}/100</span>`)
-        : '<span class="pill warn">Belum dikerjakan</span>';
-      const btn = t.done
-        ? `<button class="btn sm ghost" data-topic="${t.topic_id}" data-name="${esc(t.topic)}">↻ Ulangi Kuis</button>`
-        : `<button class="btn sm" data-topic="${t.topic_id}" data-name="${esc(t.topic)}">▶ Mulai Kuis</button>`;
+    const rows = (data.topics || []).map((tp, idx) => {
+      const status = tp.done
+        ? (tp.best_score < pass
+            ? `<span class="pill bad">${esc(t('quiz.failed', { score: tp.best_score }))}</span>`
+            : `<span class="pill good">${esc(t('quiz.passed', { score: tp.best_score }))}</span>`)
+        : `<span class="pill warn">${esc(t('quiz.notDone'))}</span>`;
+      const btn = tp.done
+        ? `<button class="btn sm ghost" data-topic="${tp.topic_id}" data-name="${esc(tp.topic)}">${t('quiz.retry')}</button>`
+        : `<button class="btn sm" data-topic="${tp.topic_id}" data-name="${esc(tp.topic)}">${t('quiz.start')}</button>`;
       return `
         <tr>
           <td><span class="muted">${idx + 1}</span></td>
-          <td>${esc(t.topic)}</td>
-          <td><span class="muted">${esc(t.area || '-')}</span></td>
+          <td>${esc(tp.topic)}</td>
+          <td><span class="muted">${esc(tp.area || '-')}</span></td>
           <td>${status}</td>
           <td>${btn}</td>
         </tr>`;
@@ -963,15 +963,15 @@ async function loadNewQuiz() {
         <div class="page-head" style="margin:0 0 6px"><div>
           <h3 style="margin:0">${esc(data.employee.name)} <span class="pill muted">${esc(data.employee.division)}</span></h3>
           <div class="kv">
-            <span>Total topik: <strong>${data.totalTopics}</strong></span>
-            <span>Sudah dikerjakan: <strong style="color:${scoreColor(80)}">${data.doneCount}</strong></span>
-            <span>Belum dikerjakan: <strong style="color:var(--warn)">${data.undoneCount}</strong></span>
-            <span>Soal per topik: <strong>${data.questionsPerTopic}</strong></span>
+            <span>${t('quiz.totalTopics')}: <strong>${data.totalTopics}</strong></span>
+            <span>${t('quiz.doneCount')}: <strong style="color:${scoreColor(80)}">${data.doneCount}</strong></span>
+            <span>${t('quiz.undoneCount')}: <strong style="color:var(--warn)">${data.undoneCount}</strong></span>
+            <span>${t('quiz.perTopic')}: <strong>${data.questionsPerTopic}</strong></span>
           </div>
         </div></div>
-        <div class="muted" style="margin-bottom:8px">Setiap peserta — baru maupun yang sudah pernah — melewati seluruh <strong>${data.totalTopics} topik</strong> secara berurutan. Soal dibuat oleh ${esc(state.config.aiProvider || "AI")} (${data.questionsPerTopic} soal/topik) dan skor tercatat ke data.</div>
+        <div class="muted" style="margin-bottom:8px">${t('quiz.curriculumNote', { n: data.totalTopics, provider: esc(state.config.aiProvider || 'AI'), q: data.questionsPerTopic, lang: LANG_NAMES[quizLang()] })}</div>
         <div class="scroll-x"><table>
-          <thead><tr><th>#</th><th>Topik</th><th>Area</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>${t('quiz.colTopic')}</th><th>${t('quiz.colArea')}</th><th>${t('quiz.colStatus')}</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
       </div>`;
@@ -979,18 +979,19 @@ async function loadNewQuiz() {
       b.addEventListener('click', () => startQuiz(Number(b.dataset.topic), b.dataset.name,
         { playBox: $('#newQuizPlayBox'), reload: loadNewQuiz })));
   } catch (e) {
-    gapBox.innerHTML = `<div class="notice err">Gagal memuat: ${esc(e.message)}</div>`;
+    gapBox.innerHTML = `<div class="notice err">${esc(t('common.failedLoad', { msg: e.message }))}</div>`;
   }
 }
 
 async function startQuiz(topicId, topicName, ctx) {
   const playBox = ctx.playBox;
   state.activeQuizCtx = ctx;
-  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> <strong>DeepSeek</strong> sedang merencanakan sub-konsep lalu menyusun soal untuk <strong>${esc(topicName)}</strong>… <span class="muted">(bisa 1–3 menit)</span></div>`;
+  const lang = quizLang();
+  playBox.innerHTML = `<div class="panel"><span class="spinner"></span> ${t('quiz.generating', { topic: esc(topicName), lang: LANG_NAMES[lang] })}</div>`;
   playBox.scrollIntoView({ block: 'start' });
   try {
     const quiz = await api('/api/quiz/generate', {
-      method: 'POST', body: JSON.stringify({ employee_id: state.employeeId, topic_id: topicId }),
+      method: 'POST', body: JSON.stringify({ employee_id: state.employeeId, topic_id: topicId, lang }),
     });
     state.activeQuiz = quiz;
     const items = quiz.questions.map((q) => `
@@ -1006,25 +1007,26 @@ async function startQuiz(topicId, topicName, ctx) {
     playBox.innerHTML = `
       <div class="panel">
         <div class="page-head" style="margin:0 0 6px"><div>
-          <h3 style="margin:0">Kuis: ${esc(quiz.topic)}
+          <h3 style="margin:0">${esc(t('quiz.heading', { topic: quiz.topic }))}
             <span class="pill muted">${esc(quiz.model || state.config.model)}</span>
-            ${quiz.method === 'planned' ? '<span class="pill info">🧠 terencana</span>' : ''}
-            ${quiz.grounded_count ? `<span class="pill good">📚 ${quiz.grounded_count} soal berdasar dokumen legal</span>` : ''}
+            <span class="pill muted">${(quiz.lang || lang).toUpperCase()}</span>
+            ${quiz.method === 'planned' ? `<span class="pill info">${esc(t('quiz.planned'))}</span>` : ''}
+            ${quiz.grounded_count ? `<span class="pill good">${esc(t('quiz.groundedCount', { n: quiz.grounded_count }))}</span>` : ''}
           </h3>
-          <div class="kv"><span>${quiz.num_questions} soal · setiap soal bernilai ${Math.round(100 / quiz.num_questions)} poin · maks 100</span></div>
+          <div class="kv"><span>${esc(t('quiz.meta', { n: quiz.num_questions, pts: Math.round(100 / quiz.num_questions) }))}</span></div>
         </div></div>
         ${planTraceHtml(quiz)}
         ${items}
         <div class="row" style="margin-top:14px">
-          <button class="btn" id="submitQuizBtn">📤 Kumpulkan Jawaban</button>
-          <button class="btn ghost sm" id="cancelQuizBtn">Batal</button>
+          <button class="btn" id="submitQuizBtn">${t('quiz.submit')}</button>
+          <button class="btn ghost sm" id="cancelQuizBtn">${t('quiz.cancel')}</button>
           <span id="quizValidateMsg" class="muted"></span>
         </div>
       </div>`;
     $('#cancelQuizBtn').addEventListener('click', () => { state.activeQuiz = null; playBox.innerHTML = ''; });
     $('#submitQuizBtn').addEventListener('click', submitQuiz);
   } catch (e) {
-    playBox.innerHTML = `<div class="notice err">Gagal membuat kuis: ${esc(e.message)}</div>`;
+    playBox.innerHTML = `<div class="notice err">${esc(t('quiz.genFailed', { msg: e.message }))}</div>`;
   }
 }
 
@@ -1040,7 +1042,7 @@ function planTraceHtml(quiz) {
     : '';
   return `
     <details style="margin:4px 0 10px">
-      <summary class="muted" style="cursor:pointer">🧠 Rencana sub-konsep${subs && subs.subtopics ? ` (${subs.subtopics.length})` : ''}</summary>
+      <summary class="muted" style="cursor:pointer">${t('quiz.plan')}${subs && subs.subtopics ? ` (${subs.subtopics.length})` : ''}</summary>
       ${thought ? `<div class="muted" style="margin:8px 0">💭 ${esc(thought.thought)}</div>` : ''}
       ${items ? `<ul style="margin:6px 0 0 4px;list-style:none;padding:0">${items}</ul>` : ''}
     </details>`;
@@ -1056,10 +1058,10 @@ async function submitQuiz() {
     if (sel) answers[q.i] = Number(sel.value); else { answers[q.i] = null; unanswered++; }
   });
   if (unanswered > 0) {
-    $('#quizValidateMsg').innerHTML = `<span style="color:var(--bad)">Masih ada ${unanswered} soal belum dijawab.</span>`;
+    $('#quizValidateMsg').innerHTML = `<span style="color:var(--bad)">${esc(t('quiz.unanswered', { n: unanswered }))}</span>`;
     return;
   }
-  const btn = $('#submitQuizBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menilai…';
+  const btn = $('#submitQuizBtn'); btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${esc(t('quiz.grading'))}`;
   try {
     const out = await api('/api/quiz/submit', {
       method: 'POST', body: JSON.stringify({ session_id: quiz.session_id, answers }),
@@ -1067,17 +1069,17 @@ async function submitQuiz() {
     const prevTxt = out.prevBest == null ? '–' : `${out.prevBest}`;
     const bestPill = out.improved
       ? (out.prevBest == null
-          ? '<span class="pill good">Tersimpan</span>'
+          ? `<span class="pill good">${esc(t('quiz.savedPill'))}</span>`
           : `<span class="pill good">▲ +${out.newBest - out.prevBest}</span>`)
-      : '<span class="pill muted">Tetap</span>';
+      : `<span class="pill muted">${esc(t('quiz.samePill'))}</span>`;
     const saveNotice = !out.improved
-      ? `<div class="notice">Skor kuis ini (<strong>${out.score}/100</strong>) tidak melampaui skor terbaik lama (<strong>${out.prevBest}/100</strong>). Skor lama dipertahankan.</div>`
+      ? `<div class="notice">${t('quiz.notImproved', { score: out.score, prev: out.prevBest })}</div>`
       : out.prevBest == null
-        ? `<div class="notice ok">Skor pertama untuk topik ini tersimpan: <strong>${out.newBest}/100</strong>.</div>`
-        : `<div class="notice ok">Skor baru lebih tinggi — skor terbaik topik diperbarui menjadi <strong>${out.newBest}/100</strong> dan tersimpan.</div>`;
+        ? `<div class="notice ok">${t('quiz.firstScore', { score: out.newBest })}</div>`
+        : `<div class="notice ok">${t('quiz.improved', { score: out.newBest })}</div>`;
     const feedback = out.results.map((r) => `
       <div class="card" style="margin-top:8px;border-color:${r.ok ? 'rgba(52,211,153,.4)' : 'rgba(248,113,113,.4)'}">
-        <div style="font-weight:600">${r.i + 1}. ${esc(r.question)} <span class="pill ${r.ok ? 'good' : 'bad'}">${r.ok ? 'Benar' : 'Salah'}</span></div>
+        <div style="font-weight:600">${r.i + 1}. ${esc(r.question)} <span class="pill ${r.ok ? 'good' : 'bad'}">${r.ok ? t('quiz.correct') : t('quiz.wrong')}</span></div>
         <div style="margin-top:6px">${r.options.map((opt, oi) => {
           const isAns = oi === r.answer_index; const isChosen = oi === r.chosen;
           const mark = isAns ? '✅' : (isChosen ? '❌' : '·');
@@ -1087,23 +1089,23 @@ async function submitQuiz() {
         ${r.explanation ? `<div class="muted" style="margin-top:6px">💡 ${esc(r.explanation)}</div>` : ''}
         ${r.grounded && r.source ? `
           <details style="margin-top:6px">
-            <summary class="muted" style="cursor:pointer">📚 ${esc(r.source)} — lihat kutipan</summary>
+            <summary class="muted" style="cursor:pointer">📚 ${esc(r.source)} — ${esc(t('quiz.seeExcerpt'))}</summary>
             <div class="muted" style="margin-top:6px;white-space:pre-line;font-size:13px">${esc(r.excerpt || '')}</div>
           </details>` : ''}
       </div>`).join('');
     ctx.playBox.innerHTML = `
       <div class="panel">
         <div class="page-head" style="margin:0 0 8px"><div>
-          <h3 style="margin:0">Hasil Kuis: ${esc(out.topic)}</h3>
+          <h3 style="margin:0">${esc(t('quiz.resultHeading', { topic: out.topic }))}</h3>
           <div class="kv">
-            <span>Skor: <strong style="color:${scoreColor(out.score)};font-size:18px">${out.score}/100</strong></span>
-            <span>Benar ${out.correct} dari ${out.total}</span>
-            <span>Skor terbaik topik: ${prevTxt} → <strong style="color:${scoreColor(out.newBest)}">${out.newBest}/100</strong> ${bestPill}</span>
+            <span>${t('quiz.score')}: <strong style="color:${scoreColor(out.score)};font-size:18px">${out.score}/100</strong></span>
+            <span>${esc(t('quiz.correctOf', { c: out.correct, t: out.total }))}</span>
+            <span>${t('quiz.bestTopic')}: ${prevTxt} → <strong style="color:${scoreColor(out.newBest)}">${out.newBest}/100</strong> ${bestPill}</span>
           </div>
         </div></div>
         ${saveNotice}
         <div style="margin-top:10px">${feedback}</div>
-        <div class="row" style="margin-top:14px"><button class="btn sm" id="backToGaps">↺ Kembali ke daftar topik</button></div>
+        <div class="row" style="margin-top:14px"><button class="btn sm" id="backToGaps">${t('quiz.back')}</button></div>
       </div>`;
     state.activeQuiz = null;
     // Panel hasil hidup di playBox, sedangkan reload() hanya menggambar ulang
@@ -1118,10 +1120,36 @@ async function submitQuiz() {
     });
     ctx.reload(); // refresh the topic list (the just-finished topic moves out of "belum dikerjakan")
   } catch (e) {
-    btn.disabled = false; btn.innerHTML = '📤 Kumpulkan Jawaban';
+    btn.disabled = false; btn.innerHTML = t('quiz.submit');
     $('#quizValidateMsg').innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Ganti bahasa: teks statis diurus i18n.js, tampilan dinamis digambar ulang di sini
+// ---------------------------------------------------------------------------
+onLangChange((lang, what) => {
+  const activeTab = ($('.nav-item.active') || {}).dataset?.tab;
+  // Bahasa soal kuis hanya memengaruhi catatan di daftar topik peserta.
+  if (what === 'quiz') {
+    if (activeTab === 'newquiz') loadNewQuiz();
+    return;
+  }
+  renderRegister();
+  moveUnderline();
+  divisionsLoaded = false;
+  if (authMode === 'register') loadRegisterDivisions();
+  if (!state.role) return;
+  renderRoleBadge();
+  if (state.role !== 'participant') loadOverview().catch(() => {});
+  // Kuis yang sedang dikerjakan / hasil AI tidak dihapus — hanya daftar dan
+  // tabel yang dimuat ulang dalam bahasa baru.
+  if (activeTab === 'trend') loadTrend();
+  if (activeTab === 'acks') loadAcks();
+  if (activeTab === 'newquiz') loadNewQuiz();
+  if (activeTab === 'account') loadAccount();
+  if (activeTab === 'legal') loadLegal();
+});
 
 // ---------------------------------------------------------------------------
 // Boot: lanjutkan sesi yang masih berlaku, atau tampilkan layar masuk
